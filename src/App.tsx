@@ -7,7 +7,7 @@ import {
   Download,
   Loader2,
   Mic,
-  AlignLeft
+  AlignLeft,
 } from "lucide-react";
 
 interface Slide {
@@ -21,7 +21,7 @@ interface PresentationData {
   slides: Slide[];
 }
 
-/* 🔥 YOUR LIVE RENDER BACKEND */
+/* ✅ LIVE RENDER BACKEND */
 const API_BASE = "https://slideforge-backend.onrender.com";
 
 const themeStyles: Record<string, string> = {
@@ -46,9 +46,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* ===========================
-     GENERATE SLIDES (LIVE API)
-     =========================== */
+  // ===========================
+  // GENERATE SLIDES
+  // ===========================
   const generateSlides = async () => {
     if (!topic.trim()) return;
 
@@ -60,16 +60,16 @@ export default function App() {
       const res = await fetch(`${API_BASE}/generate-json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, template }),
+        body: JSON.stringify({ topic }),
       });
 
+      const text = await res.text();
+
       if (!res.ok) {
-        throw new Error(
-          "Server is waking up. Please wait 10-20 seconds and try again."
-        );
+        throw new Error(text || "Backend error");
       }
 
-      const result = await res.json();
+      const result = JSON.parse(text);
       setData(result);
     } catch (err: any) {
       setError(err.message || "Something went wrong.");
@@ -78,9 +78,9 @@ export default function App() {
     }
   };
 
-  /* ===========================
-     DOWNLOAD PPT
-     =========================== */
+  // ===========================
+  // DOWNLOAD PPT
+  // ===========================
   const downloadPPT = async () => {
     if (!data) return;
 
@@ -92,7 +92,8 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to generate PPT.");
+        const text = await res.text();
+        throw new Error(text || "Failed to generate PPT");
       }
 
       const blob = await res.blob();
