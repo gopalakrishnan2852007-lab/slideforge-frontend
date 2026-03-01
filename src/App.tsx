@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   Layout,
@@ -8,7 +7,6 @@ import {
   Download,
   Loader2,
   Mic,
-  Presentation,
   AlignLeft
 } from "lucide-react";
 
@@ -23,12 +21,16 @@ interface PresentationData {
   slides: Slide[];
 }
 
+/* 🔥 YOUR LIVE RENDER BACKEND */
 const API_BASE = "https://slideforge-backend.onrender.com";
 
 const themeStyles: Record<string, string> = {
-  modern: "bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 text-white",
-  business: "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-50",
-  academic: "bg-gradient-to-br from-slate-50 to-white text-slate-900 border border-slate-200",
+  modern:
+    "bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 text-white",
+  business:
+    "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-50",
+  academic:
+    "bg-gradient-to-br from-slate-50 to-white text-slate-900 border border-slate-200",
 };
 
 const templates = [
@@ -42,14 +44,17 @@ export default function App() {
   const [template, setTemplate] = useState("modern");
   const [data, setData] = useState<PresentationData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeSlide, setActiveSlide] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ GENERATE SLIDES (LIVE BACKEND)
+  /* ===========================
+     GENERATE SLIDES (LIVE API)
+     =========================== */
   const generateSlides = async () => {
     if (!topic.trim()) return;
+
     setLoading(true);
     setError(null);
+    setData(null);
 
     try {
       const res = await fetch(`${API_BASE}/generate-json`, {
@@ -58,47 +63,57 @@ export default function App() {
         body: JSON.stringify({ topic, template }),
       });
 
-      if (!res.ok) throw new Error("Generation failed");
+      if (!res.ok) {
+        throw new Error(
+          "Server is waking up. Please wait 10-20 seconds and try again."
+        );
+      }
 
       const result = await res.json();
       setData(result);
-      setActiveSlide(0);
     } catch (err: any) {
-      setError(err.message || "Server error");
+      setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ DOWNLOAD PPT (LIVE BACKEND)
+  /* ===========================
+     DOWNLOAD PPT
+     =========================== */
   const downloadPPT = async () => {
     if (!data) return;
 
-    const res = await fetch(`${API_BASE}/download-ppt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data, template }),
-    });
+    try {
+      const res = await fetch(`${API_BASE}/download-ppt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data, template }),
+      });
 
-    if (!res.ok) {
-      setError("PPT generation failed");
-      return;
+      if (!res.ok) {
+        throw new Error("Failed to generate PPT.");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${data.title.replace(/[^a-z0-9]/gi, "_")}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: any) {
+      setError(err.message || "Download failed.");
     }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${data.title}.pptx`;
-    a.click();
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] flex flex-col md:flex-row font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#F8F9FB] flex flex-col md:flex-row font-sans">
       
       {/* LEFT PANEL */}
-      <div className="w-full md:w-[400px] bg-white border-r border-slate-200 flex flex-col h-screen">
+      <div className="w-full md:w-[420px] bg-white border-r border-slate-200 flex flex-col h-screen">
         <div className="p-8 flex flex-col h-full overflow-y-auto space-y-8">
           
           <div className="flex items-center gap-3">
@@ -111,8 +126,8 @@ export default function App() {
           </div>
 
           <div className="space-y-6 flex-1">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+            <div>
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-2">
                 <AlignLeft size={16} /> Topic
               </label>
               <textarea
@@ -123,8 +138,10 @@ export default function App() {
               />
             </div>
 
-            <div className="space-y-3">
-              <label className="text-sm font-semibold text-slate-700">Choose Theme</label>
+            <div>
+              <label className="text-sm font-semibold text-slate-700 mb-3 block">
+                Choose Theme
+              </label>
               <div className="grid grid-cols-3 gap-3">
                 {templates.map((t) => {
                   const Icon = t.icon;
@@ -165,7 +182,7 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <Sparkles size={18} /> {data ? "Regenerate" : "Generate"}
+                  <Sparkles size={18} /> Generate
                 </>
               )}
             </button>
@@ -186,25 +203,27 @@ export default function App() {
       <div className="flex-1 flex items-center justify-center p-12 overflow-auto">
         {data ? (
           <div className="w-full max-w-5xl">
-            <div className={`aspect-video rounded-2xl shadow-2xl p-12 ${themeStyles[template]}`}>
+            <div
+              className={`aspect-video rounded-2xl shadow-2xl p-12 ${themeStyles[template]}`}
+            >
               <h2 className="text-4xl font-bold mb-8">
-                {data.slides[activeSlide].heading}
+                {data.slides[0].heading}
               </h2>
 
               <ul className="space-y-4 text-xl">
-                {data.slides[activeSlide].points.map((p, i) => (
+                {data.slides[0].points.map((p, i) => (
                   <li key={i}>• {p}</li>
                 ))}
               </ul>
             </div>
 
-            {data.slides[activeSlide].speakerNotes && (
+            {data.slides[0].speakerNotes && (
               <div className="mt-6 bg-white p-6 rounded-xl border border-slate-200">
                 <h3 className="text-sm font-bold mb-2 flex items-center gap-2">
                   <Mic size={16} /> Speaker Notes
                 </h3>
                 <p className="text-sm text-slate-600">
-                  {data.slides[activeSlide].speakerNotes}
+                  {data.slides[0].speakerNotes}
                 </p>
               </div>
             )}
