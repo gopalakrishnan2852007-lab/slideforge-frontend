@@ -1,21 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Sparkles,
-  Layout,
-  Briefcase,
-  GraduationCap,
-  Download,
-  Loader2,
-  Mic,
-  AlignLeft,
-  Wand2,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  Presentation,
-  Settings2,
-  FileText,
-  AlertCircle
+  Sparkles, Layout, Briefcase, GraduationCap, Download, Loader2,
+  Mic, Wand2, ChevronLeft, ChevronRight, RefreshCw, Presentation,
+  Settings2, FileText, AlertCircle, Play, CheckCircle2, MessageSquare
 } from "lucide-react";
 
 interface Slide {
@@ -29,27 +17,87 @@ interface PresentationData {
   slides: Slide[];
 }
 
-const API_BASE = "https://slideforge-backend.onrender.com";
+const API_BASE = "https://slideforge-backend.onrender.com"; // Change to localhost:5000 if running locally
 
 const templates = [
-  { id: "modern", icon: Layout, label: "Modern", color: "bg-blue-500" },
-  { id: "business", icon: Briefcase, label: "Business", color: "bg-slate-800" },
-  { id: "academic", icon: GraduationCap, label: "Academic", color: "bg-emerald-600" },
+  { id: "modern", icon: Layout, label: "Modern", color: "bg-pink-500" },
+  { id: "business", icon: Briefcase, label: "Business", color: "bg-blue-600" },
+  { id: "academic", icon: GraduationCap, label: "Academic", color: "bg-emerald-700" },
 ] as const;
 
+const tones = ["Professional", "Simple", "Technical", "Investor Pitch", "Storytelling"];
 type TemplateID = typeof templates[number]["id"];
 
 export default function App() {
   const [topic, setTopic] = useState("");
   const [template, setTemplate] = useState<TemplateID>("modern");
+  const [tone, setTone] = useState("Professional");
   const [data, setData] = useState<PresentationData | null>(null);
   
-  // States
   const [loading, setLoading] = useState(false);
+  const [improving, setImproving] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideCount, setSlideCount] = useState(6);
+  const [presenterMode, setPresenterMode] = useState(false);
+  
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [toast, setToast] = useState<{ message: string, type: 'error' | 'success' } | null>(null);
+
+  // Auto-scroll ref for mobile
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Auto-Save / Load
+  useEffect(() => {
+    const saved = localStorage.getItem("slideforge_autosave");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.slides) setData(parsed);
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (data) localStorage.setItem("slideforge_autosave", JSON.stringify(data));
+  }, [data]);
+
+  // Keyboard Navigation for Presenter Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!data) return;
+      if (e.key === "ArrowRight") setActiveSlide(s => Math.min(data.slides.length - 1, s + 1));
+      if (e.key === "ArrowLeft") setActiveSlide(s => Math.max(0, s - 1));
+      if (e.key === "Escape") setPresenterMode(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [data]);
+
+  // Smart Loader
+  useEffect(() => {
+    let interval: any;
+    if (loading) {
+      interval = setInterval(() => {
+        setLoadingStep((prev) => (prev + 1) % 4);
+      }, 2500);
+    } else {
+      setLoadingStep(0);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  const loadingMessages = [
+    "Structuring presentation narrative...",
+    "Generating deep insights...",
+    "Designing slide layouts...",
+    "Applying premium typography..."
+  ];
+
+  const showToast = (message: string, type: 'error' | 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   /* ========================= */
   /* API CALLS                 */
@@ -57,71 +105,86 @@ export default function App() {
   const generateSlides = async () => {
     if (!topic.trim()) return;
     setLoading(true);
-    setError(null);
-
     try {
       const res = await fetch(`${API_BASE}/generate-json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, slideCount }),
+        body: JSON.stringify({ topic, slideCount, tone }),
       });
-
       const text = await res.text();
-      if (!res.ok) throw new Error(text || "Failed to generate presentation.");
-
-      const result = JSON.parse(text);
-      setData(result);
+      if (!res.ok) throw new Error(text || "Failed to generate deck.");
+      setData(JSON.parse(text));
       setActiveSlide(0);
+      showToast("Presentation generated successfully!", "success");
+      
+      // Auto-scroll to canvas on mobile
+      setTimeout(() => {
+        canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
+
     } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+      showToast(err.message || "Generation failed.", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const improveSlide = async () => {
+    if (!data) return;
+    setImproving(true);
+    try {
+      const current = data.slides[activeSlide];
+      const res = await fetch(`${API_BASE}/improve-slide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ heading: current.heading, points: current.points, tone }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text);
+      const result = JSON.parse(text);
+      
+      const updatedSlides = [...data.slides];
+      updatedSlides[activeSlide] = { ...current, ...result };
+      setData({ ...data, slides: updatedSlides });
+      showToast("Slide improved by AI!", "success");
+    } catch (err: any) {
+      showToast("Failed to improve slide.", "error");
+    } finally {
+      setImproving(false);
     }
   };
 
   const regenerateSlide = async () => {
     if (!data) return;
+    setImproving(true);
     try {
-      setLoading(true);
       const res = await fetch(`${API_BASE}/generate-json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: data.slides[activeSlide].heading,
-          slideCount: 1,
-        }),
+        body: JSON.stringify({ topic: data.slides[activeSlide].heading, slideCount: 1, tone }),
       });
-
-      const text = await res.text();
-      if (!res.ok) throw new Error(text);
-
-      const result = JSON.parse(text);
+      const result = JSON.parse(await res.text());
       const updatedSlides = [...data.slides];
       updatedSlides[activeSlide] = result.slides[0];
-
       setData({ ...data, slides: updatedSlides });
+      showToast("Slide regenerated.", "success");
     } catch (err: any) {
-      setError("Failed to regenerate slide. Please try again.");
+      showToast("Failed to regenerate slide.", "error");
     } finally {
-      setLoading(false);
+      setImproving(false);
     }
   };
 
   const downloadPPT = async () => {
     if (!data) return;
+    setDownloading(true);
     try {
-      setDownloading(true);
       const res = await fetch(`${API_BASE}/download-ppt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data, template }),
       });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to generate PPT");
-      }
-
+      if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -130,134 +193,165 @@ export default function App() {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      showToast("PowerPoint downloaded!", "success");
     } catch (err: any) {
-      setError(err.message || "Download failed.");
+      showToast("Export failed.", "error");
     } finally {
       setDownloading(false);
     }
   };
 
-  /* ========================= */
-  /* LIVE EDITING HANDLERS     */
-  /* ========================= */
-  const handleEditHeading = (newHeading: string) => {
+  const handleEdit = (type: 'heading' | 'point', val: string, idx?: number) => {
     if (!data) return;
     const newData = { ...data };
-    newData.slides[activeSlide].heading = newHeading;
-    setData(newData);
-  };
-
-  const handleEditPoint = (index: number, newPoint: string) => {
-    if (!data) return;
-    const newData = { ...data };
-    newData.slides[activeSlide].points[index] = newPoint;
+    if (type === 'heading') newData.slides[activeSlide].heading = val;
+    if (type === 'point' && idx !== undefined) newData.slides[activeSlide].points[idx] = val;
     setData(newData);
   };
 
   /* ========================= */
-  /* RENDER HELPERS            */
+  /* GOD-LEVEL THEME RENDERER  */
   /* ========================= */
-  // Dynamic classes for live preview based on selected theme
-  const getThemeClasses = () => {
-    switch (template) {
-      case "business":
-        return "bg-slate-900 text-white font-serif";
-      case "academic":
-        return "bg-[#f4f1ea] text-slate-900 font-serif border-8 border-double border-slate-300";
-      case "modern":
-      default:
-        return "bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 text-white font-sans";
-    }
+  // Notice the responsive text sizes (text-sm md:text-xl lg:text-2xl) to fix the mobile overflow bug!
+  const getSlideDesign = (isFullscreen = false) => {
+    const slide = data?.slides[activeSlide];
+    if (!slide) return null;
+
+    const baseInputStyle = "w-full bg-transparent border-2 border-transparent hover:border-white/10 focus:border-white/30 focus:bg-white/5 outline-none rounded-xl px-1 sm:px-2 py-1 transition-all resize-none leading-tight";
+    
+    // === MODERN ===
+    if (template === "modern") return (
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#09090B] shadow-[0_0_80px_-20px_rgba(99,102,241,0.25)] border-t-[4px] md:border-t-[6px] border-indigo-500 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#09090B] to-[#09090B] opacity-70 pointer-events-none" />
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col text-white">
+          <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-extrabold mb-2 md:mb-8 ${baseInputStyle} text-white tracking-tight`} />
+          <div className="w-8 md:w-16 h-1 bg-pink-500 rounded-full mb-2 md:mb-8 shadow-[0_0_15px_rgba(236,72,153,0.6)] shrink-0" />
+          <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+            {slide.points.map((p, i) => (
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-300 group-hover:text-slate-200 transition-colors">
+                <span className="mt-1 md:mt-2 text-indigo-400">✦</span>
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+
+    // === BUSINESS ===
+    if (template === "business") return (
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#0B101E] border-l-[8px] md:border-l-[16px] border-blue-600 shadow-2xl ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-sans">
+          <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-8 ${baseInputStyle} text-white`} />
+          <div className="w-full h-px bg-slate-800 mb-2 md:mb-8 relative shrink-0"><div className="absolute left-0 top-0 h-full w-16 md:w-32 bg-blue-500" /></div>
+          <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2 md:pr-4">
+            {slide.points.map((p, i) => (
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-300">
+                <div className="mt-2 md:mt-3 w-1.5 h-1.5 md:w-2 md:h-2 bg-blue-500 rounded-sm shrink-0" />
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1 focus:bg-white/5`} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+
+    // === ACADEMIC ===
+    return (
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#FDFBF7] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border-t-[4px] md:border-t-8 border-double border-slate-800 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)'/%3E%3C/svg%3E")`}} />
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-serif">
+          <div className="w-full border-b border-slate-300 pb-2 md:pb-6 mb-2 md:mb-8 shrink-0">
+            <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+              className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold ${baseInputStyle.replace('hover:border-white/10', 'hover:border-black/10').replace('focus:border-white/30', 'focus:border-black/30').replace('focus:bg-white/5', 'focus:bg-black/5')} text-slate-900`} />
+          </div>
+          <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2 md:pr-4">
+            {slide.points.map((p, i) => (
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-700 leading-relaxed">
+                <span className="mt-1 md:mt-2 text-slate-400 font-sans">•</span>
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} 
+                  className={`${baseInputStyle.replace('hover:border-white/10', 'hover:border-black/10').replace('focus:border-white/30', 'focus:border-black/30').replace('focus:bg-white/5', 'focus:bg-black/5')} -mt-1`} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 overflow-hidden">
+    // Responsive root: flex-col on mobile, flex-row on desktop. Allows vertical scrolling on mobile!
+    <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row font-sans text-slate-900 lg:overflow-hidden">
       
-      {/* ============================== */}
-      {/* LEFT SIDEBAR (CONTROLS)        */}
-      {/* ============================== */}
-      <aside className="w-[400px] bg-white border-r border-slate-200 flex flex-col h-screen shadow-xl z-20 relative">
-        {/* Header */}
+      {/* GLOBAL TOAST */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed bottom-6 right-6 z-[100] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold text-white
+            ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}>
+            {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+            {toast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PRESENTER MODE OVERLAY */}
+      <AnimatePresence>
+        {presenterMode && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center">
+            <button onClick={() => setPresenterMode(false)} className="absolute top-6 right-6 text-white/50 hover:text-white px-4 py-2 bg-white/10 rounded-xl transition-all z-50">Exit (ESC)</button>
+            <div className="w-full h-full md:w-[95vw] md:max-w-[1600px] md:aspect-video flex flex-col justify-center">
+              <AnimatePresence mode="wait">
+                <motion.div key={activeSlide} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.4, ease: "easeInOut" }} className="w-full relative">
+                  {getSlideDesign(true)}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* LEFT SIDEBAR (SETTINGS) */}
+      <aside className="w-full lg:w-[380px] bg-white border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col h-auto lg:h-screen shadow-2xl z-20 shrink-0">
         <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-indigo-200 shadow-lg">
+          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
             <Sparkles className="text-white w-5 h-5" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-              SlideForge
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">AI Presentation Builder</p>
-          </div>
+          <div><h1 className="text-xl font-extrabold tracking-tight text-slate-900">SlideForge</h1><p className="text-xs text-slate-500 font-medium">Pro Presentation AI</p></div>
         </div>
 
-        {/* Scrollable Settings */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-          
-          {/* Topic Input */}
+        <div className="flex-1 lg:overflow-y-auto p-6 space-y-8 custom-scrollbar">
+          {/* Topic */}
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <FileText className="w-4 h-4 text-indigo-500" />
-              Presentation Topic
-            </label>
-            <textarea
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. The Future of Artificial Intelligence in Healthcare..."
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl resize-none h-32 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-sm shadow-inner"
-            />
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider text-[11px]"><FileText className="w-4 h-4 text-indigo-500" /> Topic</label>
+            <textarea value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. The Future of SaaS..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl resize-none h-28 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-sm shadow-inner" />
           </div>
 
-          {/* Configuration */}
+          {/* Tone & Count */}
           <div className="space-y-4">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Settings2 className="w-4 h-4 text-indigo-500" />
-              Configuration
-            </label>
-            
-            <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider text-[11px]"><MessageSquare className="w-4 h-4 text-indigo-500" /> Content Strategy</label>
+            <select value={tone} onChange={(e) => setTone(e.target.value)} className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 transition-all cursor-pointer">
+              {tones.map(t => <option key={t} value={t}>{t} Tone</option>)}
+            </select>
+            <div className="grid grid-cols-4 gap-2">
               {[5, 6, 8, 12].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => setSlideCount(num)}
-                  className={`p-3 rounded-xl border text-sm font-medium transition-all ${
-                    slideCount === num 
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {num} Slides
-                </button>
+                <button key={num} onClick={() => setSlideCount(num)} className={`p-2 rounded-lg border text-xs font-bold transition-all ${slideCount === num ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{num}</button>
               ))}
             </div>
           </div>
 
-          {/* Theme Selector */}
+          {/* Theme */}
           <div className="space-y-4">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Presentation className="w-4 h-4 text-indigo-500" />
-              Design Theme
-            </label>
-            <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider text-[11px]"><Presentation className="w-4 h-4 text-indigo-500" /> Visual Theme</label>
+            <div className="space-y-2">
               {templates.map((t) => {
-                const Icon = t.icon;
                 const isActive = template === t.id;
                 return (
-                  <button
-                    key={t.id}
-                    onClick={() => setTemplate(t.id)}
-                    className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all ${
-                      isActive 
-                        ? "bg-white border-indigo-500 shadow-[0_0_0_4px_rgba(99,102,241,0.1)]" 
-                        : "bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isActive ? t.color : 'bg-slate-100'}`}>
-                      <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                    </div>
-                    <span className={`font-semibold ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>
-                      {t.label}
-                    </span>
-                    {isActive && <div className="ml-auto w-2 h-2 rounded-full bg-indigo-600" />}
+                  <button key={t.id} onClick={() => setTemplate(t.id)} className={`w-full flex items-center gap-4 p-3 rounded-xl border transition-all ${isActive ? "bg-white border-indigo-500 shadow-[0_0_0_4px_rgba(99,102,241,0.1)]" : "bg-white border-slate-200 hover:border-indigo-300"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? t.color : 'bg-slate-100'}`}><t.icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} /></div>
+                    <span className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>{t.label}</span>
                   </button>
                 );
               })}
@@ -265,171 +359,115 @@ export default function App() {
           </div>
         </div>
 
-        {/* Action Footer */}
-        <div className="p-6 bg-slate-50 border-t border-slate-200 space-y-3">
-          {error && (
-            <div className="flex items-start gap-2 text-red-600 bg-red-50 p-3 rounded-xl text-sm mb-4">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p>{error}</p>
-            </div>
-          )}
-
-          <button
-            onClick={generateSlides}
-            disabled={loading || !topic.trim()}
-            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white p-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:-translate-y-0.5"
-          >
-            {loading ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Generating Magic...</>
-            ) : (
-              <><Wand2 className="w-5 h-5" /> Generate Presentation</>
-            )}
+        {/* Generate Action */}
+        <div className="p-6 bg-white border-t border-slate-100 space-y-3 shrink-0">
+          <button onClick={generateSlides} disabled={loading || !topic.trim()} className="w-full bg-slate-900 hover:bg-black text-white p-4 rounded-xl font-bold shadow-xl shadow-slate-900/20 flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:-translate-y-0.5 relative overflow-hidden group">
+            {loading ? <><Loader2 className="w-5 h-5 animate-spin relative z-10" /> <span className="relative z-10">Generating Deck...</span></> : <><Wand2 className="w-5 h-5 relative z-10" /> <span className="relative z-10">Generate Deck</span></>}
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           </button>
-
-          {data && (
-            <button
-              onClick={downloadPPT}
-              disabled={downloading}
-              className="w-full bg-white border border-slate-200 hover:border-slate-300 text-slate-700 p-4 rounded-2xl font-bold shadow-sm flex items-center justify-center gap-2 transition-all hover:bg-slate-50 disabled:opacity-50"
-            >
-              {downloading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> Exporting...</>
-              ) : (
-                <><Download className="w-5 h-5" /> Export to PowerPoint</>
-              )}
-            </button>
-          )}
         </div>
       </aside>
 
-      {/* ============================== */}
-      {/* RIGHT CANVAS (PREVIEW)         */}
-      {/* ============================== */}
-      <main className="flex-1 relative flex flex-col overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px]">
-        
-        {/* Canvas Area */}
-        <div className="flex-1 overflow-y-auto p-10 flex flex-col items-center justify-center relative">
+      {/* THUMBNAIL NAVIGATION COLUMN (Hidden on Mobile) */}
+      {data && !loading && (
+        <aside className="w-[200px] bg-slate-100 border-r border-slate-200 h-screen overflow-y-auto custom-scrollbar p-4 space-y-4 hidden lg:block shrink-0">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 pl-2">Slides</div>
+          {data.slides.map((s, i) => (
+            <div key={i} onClick={() => setActiveSlide(i)} className={`cursor-pointer group relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${activeSlide === i ? 'border-indigo-500 shadow-md ring-4 ring-indigo-500/20' : 'border-slate-200 hover:border-indigo-300'}`}>
+              <div className="absolute inset-0 bg-white p-2 flex flex-col pointer-events-none">
+                <span className="text-[9px] font-bold text-indigo-500 mb-1">0{i + 1}</span>
+                <p className="text-[10px] font-bold text-slate-700 leading-tight line-clamp-3">{s.heading}</p>
+              </div>
+            </div>
+          ))}
+        </aside>
+      )}
+
+      {/* MAIN CANVAS */}
+      <main ref={canvasRef} className="w-full lg:flex-1 relative flex flex-col min-h-[500px] lg:min-h-0 lg:overflow-y-auto bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px]">
+        <div className="flex-1 p-4 sm:p-6 lg:p-10 flex flex-col items-center justify-center relative">
           
-          {loading && !data ? (
-            <div className="flex flex-col items-center text-slate-400 gap-4 animate-pulse">
-              <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center">
-                <Wand2 className="w-10 h-10 text-indigo-600 animate-bounce" />
-              </div>
-              <p className="font-medium text-lg text-slate-600">Crafting your presentation...</p>
-            </div>
+          {loading ? (
+             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center text-slate-400 gap-6 my-20 lg:my-0">
+               <div className="relative">
+                 <div className="absolute inset-0 bg-indigo-500 rounded-full blur-xl opacity-20 animate-pulse" />
+                 <div className="w-20 h-20 bg-white border border-slate-100 rounded-full shadow-2xl flex items-center justify-center relative z-10">
+                   <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                 </div>
+               </div>
+               <div className="text-center">
+                 <h3 className="font-bold text-slate-800 text-xl mb-1">AI is working...</h3>
+                 <motion.p key={loadingStep} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-sm font-medium text-indigo-500">{loadingMessages[loadingStep]}</motion.p>
+               </div>
+             </motion.div>
           ) : !data ? (
-            <div className="text-center max-w-md">
-              <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 transform -rotate-6">
-                <Presentation className="w-12 h-12 text-indigo-300" />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-sm my-20 lg:my-0">
+              <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 transform -rotate-6 border border-slate-100">
+                <Presentation className="w-10 h-10 text-indigo-400" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">No slides yet</h2>
-              <p className="text-slate-500">Enter a topic on the left and hit generate to watch the AI build your deck.</p>
-            </div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2 tracking-tight">Blank Canvas</h2>
+              <p className="text-slate-500 text-sm leading-relaxed">Describe your vision on the left, select a pro template, and watch the AI instantly design your deck.</p>
+            </motion.div>
           ) : (
-            <div className="w-full max-w-5xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-500">
+            <div className="w-full max-w-5xl flex flex-col items-center pb-20 lg:pb-0">
               
-              {/* Slide Counter Indicator */}
-              <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 mb-6 font-semibold text-sm text-slate-600 flex items-center gap-2">
-                <span>Slide {activeSlide + 1} of {data.slides.length}</span>
-                <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                <span className="text-indigo-600 truncate max-w-[200px]">{data.title}</span>
+              {/* Top Bar Actions */}
+              <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                 <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 font-semibold text-xs sm:text-sm text-slate-600 flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="truncate max-w-[200px] sm:max-w-[300px]">Editing Slide {activeSlide + 1} of {data.slides.length}</span>
+                 </div>
+                 <div className="flex gap-2 w-full sm:w-auto">
+                    <button onClick={() => setPresenterMode(true)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-full text-sm font-bold flex items-center gap-2 shadow-sm transition-all"><Play className="w-4 h-4 fill-current" /> Present</button>
+                    <button onClick={downloadPPT} disabled={downloading} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-full text-sm font-bold flex items-center gap-2 shadow-sm transition-all">{downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export</button>
+                 </div>
               </div>
 
-              {/* SLIDE PREVIEW BOX (16:9) */}
-              <div className={`w-full aspect-video rounded-3xl shadow-2xl p-12 flex flex-col relative group transition-all duration-700 ${getThemeClasses()}`}>
+              {/* SLIDE PREVIEW WITH ANIMATION */}
+              <AnimatePresence mode="wait">
+                <motion.div key={activeSlide} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} transition={{ duration: 0.3 }} className="w-full relative">
+                  {getSlideDesign(false)}
+                </motion.div>
+              </AnimatePresence>
+
+              {/* Advanced Floating Slide Controls */}
+              <div className="mt-8 bg-white backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-2 flex flex-wrap justify-center items-center gap-2 relative z-10 w-full sm:w-auto">
+                <div className="flex items-center">
+                  <button onClick={() => setActiveSlide((s) => Math.max(0, s - 1))} disabled={activeSlide === 0} className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
+                  <div className="px-2 sm:px-4 text-sm font-bold text-slate-700 w-16 sm:w-20 text-center">{activeSlide + 1} / {data.slides.length}</div>
+                  <button onClick={() => setActiveSlide((s) => Math.min(data.slides.length - 1, s + 1))} disabled={activeSlide === data.slides.length - 1} className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"><ChevronRight className="w-5 h-5" /></button>
+                </div>
                 
-                {/* Editable Heading */}
-                <input
-                  value={data.slides[activeSlide].heading}
-                  onChange={(e) => handleEditHeading(e.target.value)}
-                  className="text-4xl lg:text-5xl font-bold mb-10 bg-transparent border-2 border-transparent hover:border-white/20 focus:border-white/50 focus:bg-white/5 outline-none rounded-xl px-2 py-1 -ml-2 transition-all"
-                />
-
-                {/* Editable Bullet Points */}
-                <ul className="space-y-4 flex-1 overflow-y-auto pr-4 custom-scrollbar">
-                  {data.slides[activeSlide].points.map((p, i) => (
-                    <li key={i} className="flex items-start gap-4 text-xl lg:text-2xl opacity-90 group-hover:opacity-100 transition-opacity">
-                      <span className="mt-2 h-2 w-2 rounded-full bg-current shrink-0" />
-                      <textarea
-                        value={p}
-                        onChange={(e) => handleEditPoint(i, e.target.value)}
-                        className="w-full bg-transparent border-2 border-transparent hover:border-white/20 focus:border-white/50 focus:bg-white/5 outline-none rounded-xl px-2 py-1 -mt-1 -ml-2 resize-none transition-all leading-tight"
-                        rows={2}
-                      />
-                    </li>
-                  ))}
-                </ul>
-
-                {/* Theme Watermark (Purely visual) */}
-                <div className="absolute bottom-6 right-8 opacity-20 flex items-center gap-2 font-bold tracking-widest uppercase text-sm">
-                  <Sparkles className="w-4 h-4" /> SlideForge
+                <div className="hidden sm:block w-px h-8 bg-slate-200 mx-2" />
+                
+                {/* AI Tools inside controls */}
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-center border-t sm:border-t-0 border-slate-100 pt-2 sm:pt-0 mt-2 sm:mt-0">
+                  <button onClick={improveSlide} disabled={improving} className="px-3 sm:px-4 py-2 hover:bg-slate-50 text-slate-700 rounded-xl flex items-center gap-2 font-bold text-xs sm:text-sm transition-colors group">
+                    <Sparkles className={`w-4 h-4 text-amber-500 ${improving ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} /> <span className="hidden sm:inline">Improve</span>
+                  </button>
+                  <button onClick={regenerateSlide} disabled={improving} className="px-3 sm:px-4 py-2 hover:bg-slate-50 text-slate-700 rounded-xl flex items-center gap-2 font-bold text-xs sm:text-sm transition-colors group">
+                    <RefreshCw className={`w-4 h-4 text-indigo-500 ${improving ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} /> <span className="hidden sm:inline">Rewrite</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Floating Slide Controls */}
-              <div className="mt-8 bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-2 flex items-center gap-2">
-                <button
-                  onClick={() => setActiveSlide((s) => Math.max(0, s - 1))}
-                  disabled={activeSlide === 0}
-                  className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                
-                <div className="px-4 text-sm font-bold text-slate-700">
-                  {activeSlide + 1} / {data.slides.length}
-                </div>
-
-                <button
-                  onClick={() => setActiveSlide((s) => Math.min(data.slides.length - 1, s + 1))}
-                  disabled={activeSlide === data.slides.length - 1}
-                  className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-
-                <div className="w-px h-8 bg-slate-200 mx-2" />
-
-                <button
-                  onClick={regenerateSlide}
-                  disabled={loading}
-                  className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl flex items-center gap-2 font-semibold text-sm transition-colors"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                  Regenerate Slide
-                </button>
-              </div>
-
-              {/* Speaker Notes Card */}
+              {/* Speaker Notes */}
               {data.slides[activeSlide].speakerNotes && (
-                <div className="mt-8 w-full max-w-3xl bg-white border border-slate-200 shadow-md rounded-2xl overflow-hidden">
-                  <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex items-center gap-2 text-slate-700 font-bold text-sm">
-                    <Mic className="w-4 h-4 text-indigo-500" />
-                    Speaker Notes
-                  </div>
-                  <div className="p-6 text-slate-600 leading-relaxed text-sm">
-                    {data.slides[activeSlide].speakerNotes}
-                  </div>
+                <div className="mt-8 w-full max-w-3xl bg-white border border-slate-200 shadow-md rounded-2xl overflow-hidden text-left">
+                  <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wider text-[11px]"><Mic className="w-4 h-4 text-indigo-500" /> Presenter Notes</div>
+                  <div className="p-6 text-slate-600 leading-relaxed text-sm">{data.slides[activeSlide].speakerNotes}</div>
                 </div>
               )}
-
             </div>
           )}
         </div>
       </main>
 
-      {/* Inline styles for custom scrollbar to keep code single-file */}
       <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(156, 163, 175, 0.5);
-          border-radius: 20px;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 20px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(156, 163, 175, 0.7); }
       `}} />
     </div>
   );
