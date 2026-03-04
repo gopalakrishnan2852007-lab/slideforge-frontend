@@ -1,10 +1,28 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Sparkles, Layout, Briefcase, GraduationCap, Download, Loader2,
-  Mic, Wand2, ChevronLeft, ChevronRight, RefreshCw, Presentation,
-  FileText, AlertCircle, Play, Pause, CheckCircle2, MessageSquare,
-  PlusCircle, BookOpen, Volume2, Copy
+  Sparkles,
+  Layout,
+  Briefcase,
+  GraduationCap,
+  Download,
+  Loader2,
+  Mic,
+  Wand2,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Presentation,
+  FileText,
+  AlertCircle,
+  Play,
+  Pause,
+  CheckCircle2,
+  MessageSquare,
+  PlusCircle,
+  BookOpen,
+  Volume2,
+  Copy
 } from "lucide-react";
 
 interface Slide {
@@ -20,7 +38,7 @@ interface PresentationData {
   slides: Slide[];
 }
 
-const API_BASE = "https://slideforge-backend.onrender.com"; // Keep this pointing to your Render backend
+const API_BASE = "https://slideforge-backend.onrender.com";
 
 const templates = [
   { id: "modern", icon: Layout, label: "Modern", color: "bg-indigo-600" },
@@ -29,6 +47,15 @@ const templates = [
 ] as const;
 
 type TemplateID = typeof templates[number]["id"];
+
+/* ✅ THIS WAS MISSING — THIS CAUSED YOUR BLANK SCREEN */
+const tones = [
+  "Professional",
+  "Academic",
+  "Startup Pitch",
+  "Casual",
+  "Persuasive"
+];
 
 export default function App() {
   const [topic, setTopic] = useState("");
