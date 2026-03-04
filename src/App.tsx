@@ -48,7 +48,6 @@ const templates = [
 
 type TemplateID = typeof templates[number]["id"];
 
-/* ✅ THIS WAS MISSING — THIS CAUSED YOUR BLANK SCREEN */
 const tones = [
   "Professional",
   "Academic",
@@ -202,10 +201,9 @@ export default function App() {
     setLoading(false);
   };
 
-  // 🚀 THE BULLETPROOF DOWNLOAD FIX
   const downloadPPT = async () => {
     if (!data) return;
-    setExporting(true); // Shows the cinematic loading modal
+    setExporting(true); 
     
     try {
       const res = await fetch(`${API_BASE}/download-ppt`, {
@@ -220,12 +218,10 @@ export default function App() {
       
       const { fileName, fileData } = await res.json();
       
-      // Use browser Fetch API to safely decode massive Base64 strings (prevents memory crashes)
       const dataUrl = `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${fileData}`;
       const base64Response = await fetch(dataUrl);
       const blob = await base64Response.blob();
 
-      // Trigger actual download
       const a = document.createElement("a");
       const url = window.URL.createObjectURL(blob);
       a.href = url;
@@ -238,7 +234,6 @@ export default function App() {
       showToast("Download Complete!", "success");
     } catch (err: any) { 
       console.error("Download Error:", err);
-      // Let the user know if the Render backend is asleep!
       if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
         showToast("Server is waking up... Please try again in 30 seconds!", "error");
       } else {
@@ -304,7 +299,7 @@ export default function App() {
   };
 
   // ==========================================
-  // 👑 GOD-LEVEL THEME ENGINE 
+  // UNIFIED CONSISTENT THEME ENGINE
   // ==========================================
   const getSlideDesign = (isFullscreen = false) => {
     const slide = data?.slides?.[activeSlide];
@@ -314,18 +309,19 @@ export default function App() {
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
     
     const layout = slide.layout || "image_right";
-    const variantIndex = (activeSlide + 1) % 3; 
-
     const baseInputStyle = "w-full bg-transparent border-2 border-transparent outline-none transition-all resize-none leading-tight";
     
-    // --- 1. MODERN THEME ---
+    // --- 1. MODERN THEME (Consistent Dark/Indigo) ---
     if (template === "modern") {
-      const themes = [
-        { bg: "bg-[#09090B]", hex: "#09090B", text: "text-white", accent: "bg-indigo-500", glow: "shadow-indigo-500/50", points: "text-slate-300", overlay: "bg-black/80" },
-        { bg: "bg-[#1E1B4B]", hex: "#1E1B4B", text: "text-white", accent: "bg-pink-500", glow: "shadow-pink-500/50", points: "text-indigo-200", overlay: "bg-[#1E1B4B]/80" },
-        { bg: "bg-[#0F172A]", hex: "#0F172A", text: "text-white", accent: "bg-sky-400", glow: "shadow-sky-400/50", points: "text-slate-300", overlay: "bg-[#0F172A]/80" }
-      ];
-      const t = themes[variantIndex];
+      const t = { 
+        bg: "bg-[#09090B]", 
+        hex: "#09090B", 
+        text: "text-white", 
+        accent: "bg-indigo-500", 
+        glow: "shadow-indigo-500/50", 
+        points: "text-slate-300", 
+        overlay: "bg-[#09090B]/80" 
+      };
 
       return (
         <div className={`w-full aspect-video flex overflow-hidden relative group ${t.bg} shadow-2xl ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
@@ -353,7 +349,7 @@ export default function App() {
             <ul className={`space-y-5 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl inline-block' : ''}`}>
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-2xl ${t.points}`}>
-                  <span className={`${t.accent.replace('bg-','text-')} mt-1.5 opacity-80`}>✦</span>
+                  <span className={`text-indigo-400 mt-1.5 opacity-80`}>✦</span>
                   <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
                 </li>
               ))}
@@ -370,14 +366,16 @@ export default function App() {
       );
     }
 
-    // --- 2. BUSINESS THEME ---
+    // --- 2. BUSINESS THEME (Consistent Light/Corporate Blue) ---
     if (template === "business") {
-      const themes = [
-        { bg: "bg-white", text: "text-slate-900", accent: "bg-blue-600", border: "border-slate-200", points: "text-slate-600", overlay: "bg-white/90" },
-        { bg: "bg-slate-900", text: "text-white", accent: "bg-sky-400", border: "border-slate-800", points: "text-slate-300", overlay: "bg-slate-900/90" },
-        { bg: "bg-slate-50", text: "text-slate-800", accent: "bg-teal-600", border: "border-slate-200", points: "text-slate-600", overlay: "bg-slate-50/90" }
-      ];
-      const t = themes[variantIndex];
+      const t = { 
+        bg: "bg-white", 
+        text: "text-slate-900", 
+        accent: "bg-blue-600", 
+        border: "border-slate-200", 
+        points: "text-slate-600", 
+        overlay: "bg-white/90" 
+      };
 
       return (
         <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
@@ -391,7 +389,7 @@ export default function App() {
           )}
 
           {layout === "image_left" && (
-            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-black/5 z-10">
+            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-slate-50 z-10">
                <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
             </div>
           )}
@@ -399,7 +397,7 @@ export default function App() {
           <div className={`flex-1 p-8 md:p-14 h-full flex flex-col justify-center font-sans z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
             <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
               className={`text-3xl md:text-4xl font-bold mb-4 ${t.text} ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
-            <div className={`w-full h-px ${variantIndex === 1 ? 'bg-slate-700' : 'bg-slate-200'} mb-8`} />
+            <div className={`w-full h-px bg-slate-200 mb-8`} />
             <ul className={`space-y-6 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl' : ''}`}>
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-xl font-medium ${t.points}`}>
@@ -411,7 +409,7 @@ export default function App() {
           </div>
 
           {layout === "image_right" && (
-            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-black/5 z-10">
+            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-slate-50 z-10">
                <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
             </div>
           )}
@@ -419,18 +417,21 @@ export default function App() {
       );
     }
 
-    // --- 3. ACADEMIC THEME ---
-    const themes = [
-      { bg: "bg-[#FDFBF7]", text: "text-slate-900", accent: "bg-teal-800", accentText: "text-teal-800", points: "text-slate-700", border: "border-slate-800", overlay: "bg-[#FDFBF7]/90" },
-      { bg: "bg-[#450A0A]", text: "text-amber-50", accent: "bg-amber-400", accentText: "text-amber-400", points: "text-amber-100/80", border: "border-amber-400/30", overlay: "bg-[#450A0A]/90" },
-      { bg: "bg-slate-800", text: "text-slate-50", accent: "bg-slate-300", accentText: "text-slate-300", points: "text-slate-300", border: "border-slate-600", overlay: "bg-slate-800/90" }
-    ];
-    const t = themes[variantIndex];
+    // --- 3. ACADEMIC THEME (Consistent Paper/Teal) ---
+    const t = { 
+      bg: "bg-[#FDFBF7]", 
+      text: "text-slate-900", 
+      accent: "bg-teal-800", 
+      accentText: "text-teal-800", 
+      points: "text-slate-700", 
+      border: "border-slate-800", 
+      overlay: "bg-[#FDFBF7]/90" 
+    };
 
     return (
       <div className={`w-full aspect-video flex ${t.bg} shadow-2xl border ${t.border} overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay z-0" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`}} />
-        <div className={`absolute top-0 left-0 right-0 h-4 ${variantIndex === 1 ? 'bg-black/40' : 'bg-slate-900'} z-30`} />
+        <div className={`absolute top-0 left-0 right-0 h-4 bg-slate-900 z-30`} />
         <div className={`absolute top-4 left-0 right-0 h-1 ${t.accent} z-30`} />
         
         {layout === "center_focus" && (
