@@ -19,10 +19,11 @@ interface PresentationData {
 
 const API_BASE = "https://slideforge-backend.onrender.com"; // Change to localhost:5000 if running locally
 
+// Updated template colors to match the new Backend visually
 const templates = [
-  { id: "modern", icon: Layout, label: "Modern", color: "bg-pink-500" },
-  { id: "business", icon: Briefcase, label: "Business", color: "bg-blue-600" },
-  { id: "academic", icon: GraduationCap, label: "Academic", color: "bg-emerald-700" },
+  { id: "modern", icon: Layout, label: "Modern", color: "bg-indigo-600" },
+  { id: "business", icon: Briefcase, label: "Business", color: "bg-blue-700" },
+  { id: "academic", icon: GraduationCap, label: "Academic", color: "bg-teal-700" },
 ] as const;
 
 const tones = ["Professional", "Simple", "Technical", "Investor Pitch", "Storytelling"];
@@ -44,7 +45,6 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [toast, setToast] = useState<{ message: string, type: 'error' | 'success' } | null>(null);
 
-  // Auto-scroll ref for mobile
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Auto-Save / Load
@@ -117,11 +117,9 @@ export default function App() {
       setActiveSlide(0);
       showToast("Presentation generated successfully!", "success");
       
-      // Auto-scroll to canvas on mobile
       setTimeout(() => {
         canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 300);
-
     } catch (err: any) {
       showToast(err.message || "Generation failed.", "error");
     } finally {
@@ -212,26 +210,32 @@ export default function App() {
   /* ========================= */
   /* GOD-LEVEL THEME RENDERER  */
   /* ========================= */
-  // Notice the responsive text sizes (text-sm md:text-xl lg:text-2xl) to fix the mobile overflow bug!
   const getSlideDesign = (isFullscreen = false) => {
     const slide = data?.slides[activeSlide];
     if (!slide) return null;
 
-    const baseInputStyle = "w-full bg-transparent border-2 border-transparent hover:border-white/10 focus:border-white/30 focus:bg-white/5 outline-none rounded-xl px-1 sm:px-2 py-1 transition-all resize-none leading-tight";
+    // Theme-specific input styles for dark vs light modes
+    const darkInputStyle = "w-full bg-transparent border-2 border-transparent hover:border-white/10 focus:border-indigo-500/50 focus:bg-white/5 outline-none rounded-xl px-1 sm:px-2 py-1 transition-all resize-none leading-tight";
+    const lightInputStyle = "w-full bg-transparent border-2 border-transparent hover:border-black/5 focus:border-blue-500/30 focus:bg-slate-50 outline-none rounded-xl px-1 sm:px-2 py-1 transition-all resize-none leading-tight";
+    const academicInputStyle = "w-full bg-transparent border-2 border-transparent hover:border-slate-300 focus:border-teal-600/30 focus:bg-white outline-none rounded-xl px-1 sm:px-2 py-1 transition-all resize-none leading-tight";
     
-    // === MODERN ===
+    // === 1. MODERN (Tech Dark Mode) ===
     if (template === "modern") return (
-      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#09090B] shadow-[0_0_80px_-20px_rgba(99,102,241,0.25)] border-t-[4px] md:border-t-[6px] border-indigo-500 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#09090B] shadow-[0_0_80px_-20px_rgba(99,102,241,0.25)] ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#09090B] to-[#09090B] opacity-70 pointer-events-none" />
-        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col text-white">
+        {/* Top Accent Line */}
+        <div className="absolute top-0 left-0 right-0 h-2 md:h-4 bg-indigo-500" />
+        
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col text-white pt-8 md:pt-16">
           <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
-            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-extrabold mb-2 md:mb-8 ${baseInputStyle} text-white tracking-tight`} />
-          <div className="w-8 md:w-16 h-1 bg-pink-500 rounded-full mb-2 md:mb-8 shadow-[0_0_15px_rgba(236,72,153,0.6)] shrink-0" />
+            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-extrabold mb-2 md:mb-6 ${darkInputStyle} text-white tracking-tight`} />
+          <div className="w-8 md:w-16 h-1 bg-indigo-500 rounded-full mb-2 md:mb-8 shadow-[0_0_15px_rgba(99,102,241,0.6)] shrink-0" />
+          
           <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-300 group-hover:text-slate-200 transition-colors">
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-400 group-hover:text-slate-300 transition-colors">
                 <span className="mt-1 md:mt-2 text-indigo-400">✦</span>
-                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${darkInputStyle} -mt-1`} />
               </li>
             ))}
           </ul>
@@ -239,18 +243,24 @@ export default function App() {
       </div>
     );
 
-    // === BUSINESS ===
+    // === 2. BUSINESS (Corporate Light Mode) ===
     if (template === "business") return (
-      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#0B101E] border-l-[8px] md:border-l-[16px] border-blue-600 shadow-2xl ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
-        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-sans">
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-white shadow-2xl border border-slate-200 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+        {/* Top Blueprint Header */}
+        <div className="absolute top-0 left-0 right-0 h-3 md:h-5 bg-blue-700" />
+        {/* Bottom Gray Footer */}
+        <div className="absolute bottom-0 left-0 right-0 h-6 md:h-10 bg-slate-100 border-t border-slate-200" />
+        
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-sans pt-8 md:pt-16 pb-10 md:pb-16">
           <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
-            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-8 ${baseInputStyle} text-white`} />
-          <div className="w-full h-px bg-slate-800 mb-2 md:mb-8 relative shrink-0"><div className="absolute left-0 top-0 h-full w-16 md:w-32 bg-blue-500" /></div>
+            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 ${lightInputStyle} text-blue-800`} />
+          <div className="w-full h-px bg-slate-300 mb-2 md:mb-8 shrink-0" />
+          
           <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2 md:pr-4">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-300">
-                <div className="mt-2 md:mt-3 w-1.5 h-1.5 md:w-2 md:h-2 bg-blue-500 rounded-sm shrink-0" />
-                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1 focus:bg-white/5`} />
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-700 font-medium">
+                <div className="mt-2 md:mt-3 w-1.5 h-1.5 md:w-2 md:h-2 bg-blue-600 rounded-sm shrink-0" />
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${lightInputStyle} -mt-1 focus:bg-slate-50`} />
               </li>
             ))}
           </ul>
@@ -258,21 +268,25 @@ export default function App() {
       </div>
     );
 
-    // === ACADEMIC ===
+    // === 3. ACADEMIC (Classic Cream) ===
     return (
-      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#FDFBF7] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border-t-[4px] md:border-t-8 border-double border-slate-800 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
+      <div className={`w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden relative group bg-[#FDFBF7] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-slate-200 ${isFullscreen ? 'h-screen max-h-screen rounded-none' : ''}`}>
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)'/%3E%3C/svg%3E")`}} />
-        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-serif">
-          <div className="w-full border-b border-slate-300 pb-2 md:pb-6 mb-2 md:mb-8 shrink-0">
-            <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
-              className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold ${baseInputStyle.replace('hover:border-white/10', 'hover:border-black/10').replace('focus:border-white/30', 'focus:border-black/30').replace('focus:bg-white/5', 'focus:bg-black/5')} text-slate-900`} />
-          </div>
+        
+        {/* Double Top Line */}
+        <div className="absolute top-0 left-0 right-0 h-4 md:h-6 bg-slate-800" />
+        <div className="absolute top-4 md:top-6 left-0 right-0 h-1 md:h-1.5 bg-teal-700" />
+
+        <div className="relative z-10 p-4 sm:p-8 md:p-12 lg:p-16 h-full flex flex-col font-serif pt-10 md:pt-20">
+          <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+            className={`text-lg sm:text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-6 ${academicInputStyle} text-slate-900`} />
+          <div className="w-16 md:w-24 h-1 bg-teal-700 mb-4 md:mb-8 shrink-0" />
+          
           <ul className="space-y-2 md:space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2 md:pr-4">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-700 leading-relaxed">
-                <span className="mt-1 md:mt-2 text-slate-400 font-sans">•</span>
-                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} 
-                  className={`${baseInputStyle.replace('hover:border-white/10', 'hover:border-black/10').replace('focus:border-white/30', 'focus:border-black/30').replace('focus:bg-white/5', 'focus:bg-black/5')} -mt-1`} />
+              <li key={i} className="flex items-start gap-2 md:gap-4 text-xs sm:text-sm md:text-xl lg:text-2xl text-slate-600 leading-relaxed">
+                <span className="mt-1 md:mt-2 text-slate-400 font-sans font-bold">•</span>
+                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${academicInputStyle} -mt-1`} />
               </li>
             ))}
           </ul>
@@ -282,7 +296,6 @@ export default function App() {
   };
 
   return (
-    // Responsive root: flex-col on mobile, flex-row on desktop. Allows vertical scrolling on mobile!
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row font-sans text-slate-900 lg:overflow-hidden">
       
       {/* GLOBAL TOAST */}
@@ -368,7 +381,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* THUMBNAIL NAVIGATION COLUMN (Hidden on Mobile) */}
+      {/* THUMBNAIL NAVIGATION COLUMN */}
       {data && !loading && (
         <aside className="w-[200px] bg-slate-100 border-r border-slate-200 h-screen overflow-y-auto custom-scrollbar p-4 space-y-4 hidden lg:block shrink-0">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 pl-2">Slides</div>
@@ -440,7 +453,7 @@ export default function App() {
                 
                 <div className="hidden sm:block w-px h-8 bg-slate-200 mx-2" />
                 
-                {/* AI Tools inside controls */}
+                {/* AI Tools */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-center border-t sm:border-t-0 border-slate-100 pt-2 sm:pt-0 mt-2 sm:mt-0">
                   <button onClick={improveSlide} disabled={improving} className="px-3 sm:px-4 py-2 hover:bg-slate-50 text-slate-700 rounded-xl flex items-center gap-2 font-bold text-xs sm:text-sm transition-colors group">
                     <Sparkles className={`w-4 h-4 text-amber-500 ${improving ? 'animate-pulse' : 'group-hover:scale-110 transition-transform'}`} /> <span className="hidden sm:inline">Improve</span>
