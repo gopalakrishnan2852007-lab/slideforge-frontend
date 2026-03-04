@@ -20,7 +20,7 @@ interface PresentationData {
   slides: Slide[];
 }
 
-const API_BASE = "https://slideforge-backend.onrender.com"; // Set to localhost:5000 locally
+const API_BASE = "https://slideforge-backend.onrender.com"; // Keep this pointing to your Render backend
 
 const templates = [
   { id: "modern", icon: Layout, label: "Modern", color: "bg-indigo-600" },
@@ -120,7 +120,7 @@ export default function App() {
       showToast(successMsg, "success");
       return await res.json();
     } catch (err: any) {
-      showToast(err.message || "Action failed.", "error");
+      showToast(err.message || "Action failed. Server might be waking up.", "error");
       return null;
     }
   };
@@ -167,30 +167,81 @@ export default function App() {
     setLoading(false);
   };
 
+  const generateSpeechScript = async () => {
+    if (!data) return;
+    setLoading(true);
+    const result = await apiCall("/generate-script", { slides: data.slides }, "Full script generated!");
+    if (result?.script) { setFullScript(result.script); setShowScriptModal(true); }
+    setLoading(false);
+  };
+
+  // 🚀 THE BULLETPROOF DOWNLOAD FIX
   const downloadPPT = async () => {
     if (!data) return;
-    setExporting(true);
+    setExporting(true); // Shows the cinematic loading modal
+    
     try {
       const res = await fetch(`${API_BASE}/download-ppt`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, template }),
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ data, template }),
       });
-      if (!res.ok) throw new Error("Export Failed");
+      
+      if (!res.ok) {
+        throw new Error("Server failed to generate file.");
+      }
+      
       const { fileName, fileData } = await res.json();
       
-      const byteCharacters = window.atob(fileData);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-      const blob = new Blob([new Uint8Array(byteNumbers)], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      // Use browser Fetch API to safely decode massive Base64 strings (prevents memory crashes)
+      const dataUrl = `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${fileData}`;
+      const base64Response = await fetch(dataUrl);
+      const blob = await base64Response.blob();
 
+      // Trigger actual download
       const a = document.createElement("a");
-      a.href = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(blob);
+      a.href = url;
       a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
+      window.URL.revokeObjectURL(url);
+      
       showToast("Download Complete!", "success");
-    } catch (err) { showToast("Export failed.", "error"); }
-    finally { setExporting(false); }
+    } catch (err: any) { 
+      console.error("Download Error:", err);
+      // Let the user know if the Render backend is asleep!
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        showToast("Server is waking up... Please try again in 30 seconds!", "error");
+      } else {
+        showToast("Export failed. Please try again.", "error"); 
+      }
+    } finally { 
+      setExporting(false); 
+    }
+  };
+
+  const downloadMarkdown = () => {
+    if (!data) return;
+    let md = `# ${data.title}\n\n`;
+    data.slides.forEach((s, i) => {
+      md += `## ${i + 1}. ${s.heading}\n\n`;
+      s.points?.forEach(p => md += `- ${p}\n`);
+      if (s.speakerNotes) md += `\n**Speaker Notes:** ${s.speakerNotes}\n`;
+      md += `\n---\n\n`;
+    });
+    const blob = new Blob([md], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = window.URL.createObjectURL(blob);
+    a.download = `${data.title || "presentation"}.md`;
+    a.click();
+    showToast("Markdown downloaded!", "success");
+  };
+
+  const printToPDF = () => {
+    showToast("Use browser dialog to Save as PDF.", "success");
+    setTimeout(() => window.print(), 500);
   };
 
   const toggleTTS = () => {
@@ -394,6 +445,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col lg:flex-row font-sans text-slate-900 lg:overflow-hidden print:bg-white print:block">
       
+      {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20 }}
@@ -405,6 +457,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Exporting Modal */}
       <AnimatePresence>
         {exporting && (
           <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center">
@@ -422,6 +475,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Script Modal */}
       <AnimatePresence>
         {showScriptModal && (
           <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -443,7 +497,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* RESTORED PRESENTER MODE OVERLAY */}
+      {/* Presenter Mode Overlay */}
       <AnimatePresence>
         {presenterMode && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black flex flex-col print:hidden">
@@ -480,6 +534,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* SIDEBAR */}
       <aside className="w-full lg:w-[400px] bg-white border-r border-slate-200 flex flex-col lg:h-screen shadow-[10px_0_30px_rgba(0,0,0,0.02)] z-20 shrink-0 print:hidden">
         <div className="p-6 border-b border-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg"><Sparkles className="text-white w-5 h-5" /></div>
@@ -550,13 +605,15 @@ export default function App() {
           ) : (
             <div className="w-full max-w-[1280px] flex flex-col items-center print:block print:w-full">
               
-              <div className="w-full flex justify-between items-center mb-6 print:hidden">
+              <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 print:hidden">
                  <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 font-bold text-sm text-slate-600 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Slide {activeSlide + 1} / {data.slides.length}
                  </div>
-                 <div className="flex gap-3">
+                 <div className="flex flex-wrap gap-3">
                     <button onClick={() => setPresenterMode(true)} className="px-5 py-2.5 bg-slate-900 text-white hover:bg-black rounded-full text-sm font-bold flex items-center gap-2 shadow-lg transition-all hover:scale-105"><Play className="w-4 h-4 fill-current" /> Present</button>
                     <button onClick={downloadPPT} className="px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Download className="w-4 h-4"/> PPTX</button>
+                    <button onClick={downloadMarkdown} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Copy className="w-4 h-4"/> Markdown</button>
+                    <button onClick={printToPDF} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><FileText className="w-4 h-4"/> PDF</button>
                  </div>
               </div>
 
@@ -566,6 +623,20 @@ export default function App() {
                     {getSlideDesign(false)}
                   </motion.div>
                 </AnimatePresence>
+              </div>
+
+              {/* PDF Print Output Block */}
+              <div className="hidden print:block w-full">
+                 {data.slides.map((s, idx) => (
+                   <div key={idx} className="w-[100vw] h-[100vh] flex items-center justify-center page-break-after-always p-10">
+                      <div className="w-full aspect-video border-2 border-black flex overflow-hidden">
+                        <div className="p-10 flex-1 flex flex-col justify-center">
+                           <h1 className="text-5xl font-bold mb-6">{s.heading}</h1>
+                           <ul className="space-y-4">{(s.points || []).map((p,i) => <li key={i} className="text-2xl">• {p}</li>)}</ul>
+                        </div>
+                      </div>
+                   </div>
+                 ))}
               </div>
 
               <div className="mt-8 bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-2 flex justify-center items-center gap-2 z-10 print:hidden">
@@ -591,6 +662,14 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 20px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(156, 163, 175, 0.7); }
+        @media print { @page { size: landscape; margin: 0; } }
+      `}} />
     </div>
   );
 }
