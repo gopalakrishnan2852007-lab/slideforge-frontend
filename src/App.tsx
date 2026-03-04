@@ -8,15 +8,15 @@ import {
 } from "lucide-react";
 
 interface Slide {
-  layout: "image_right" | "image_left" | "center_focus";
-  heading: string;
-  points: string[];
-  speakerNotes: string;
+  layout?: "image_right" | "image_left" | "center_focus";
+  heading?: string;
+  points?: string[];
+  speakerNotes?: string;
   imagePrompt?: string;
 }
 
 interface PresentationData {
-  title: string;
+  title?: string;
   slides: Slide[];
 }
 
@@ -49,24 +49,37 @@ export default function App() {
   const [presentationTimer, setPresentationTimer] = useState(0);
   const timerRef = useRef<any>(null);
   const [toast, setToast] = useState<{ message: string, type: 'error' | 'success' } | null>(null);
+  const [loadingStep, setLoadingStep] = useState(0);
 
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Auto-Save Safety
   useEffect(() => {
-    const saved = localStorage.getItem("slideforge_autosave");
-    if (saved) try { setData(JSON.parse(saved)); } catch (e) {}
+    try {
+      const saved = localStorage.getItem("slideforge_autosave");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.slides)) setData(parsed);
+      }
+    } catch (e) {
+      localStorage.removeItem("slideforge_autosave");
+    }
   }, []);
 
   useEffect(() => {
     if (data) localStorage.setItem("slideforge_autosave", JSON.stringify(data));
   }, [data]);
 
+  // Keyboard Shortcuts & Timer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!data) return;
-      if (e.key === "ArrowRight") setActiveSlide(s => Math.min(data.slides.length - 1, s + 1));
+      if (!data?.slides) return;
+      if (e.key === "ArrowRight") setActiveSlide(s => Math.min((data.slides.length || 1) - 1, s + 1));
       if (e.key === "ArrowLeft") setActiveSlide(s => Math.max(0, s - 1));
       if (e.key === "Escape") setPresenterMode(false);
     };
     window.addEventListener("keydown", handleKeyDown);
+    
     if (presenterMode) {
       setPresentationTimer(0);
       timerRef.current = setInterval(() => setPresentationTimer(t => t + 1), 1000);
@@ -77,6 +90,15 @@ export default function App() {
     }
     return () => { window.removeEventListener("keydown", handleKeyDown); clearInterval(timerRef.current); };
   }, [data, presenterMode]);
+
+  useEffect(() => {
+    let interval: any;
+    if (loading) interval = setInterval(() => setLoadingStep((p) => (p + 1) % 4), 2500);
+    else setLoadingStep(0);
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  const loadingMessages = ["Structuring narrative...", "Generating insights...", "Creating AI visual prompts...", "Designing layouts..."];
 
   const showToast = (message: string, type: 'error' | 'success') => {
     setToast({ message, type });
@@ -107,12 +129,12 @@ export default function App() {
     if (!topic.trim()) return;
     setLoading(true);
     const result = await apiCall("/generate-json", { topic, slideCount, tone }, "Deck Generated!");
-    if (result) { setData(result); setActiveSlide(0); }
+    if (result?.slides) { setData(result); setActiveSlide(0); }
     setLoading(false);
   };
 
   const improveSlide = async () => {
-    if (!data) return;
+    if (!data?.slides?.[activeSlide]) return;
     setImproving(true);
     const current = data.slides[activeSlide];
     const result = await apiCall("/improve-slide", { heading: current.heading, points: current.points, tone }, "Design balanced!");
@@ -125,7 +147,7 @@ export default function App() {
   };
 
   const rewriteSlide = async () => {
-    if (!data) return;
+    if (!data?.slides?.[activeSlide]) return;
     setImproving(true);
     const current = data.slides[activeSlide];
     const result = await apiCall("/rewrite-slide", { heading: current.heading, points: current.points, tone }, "Rewritten perfectly!");
@@ -138,7 +160,7 @@ export default function App() {
   };
 
   const extendSlides = async () => {
-    if (!data) return;
+    if (!data?.slides) return;
     setLoading(true);
     const result = await apiCall("/extend-slides", { currentSlides: data.slides, addCount: 4, tone }, "Added 4 Slides!");
     if (result?.slides) setData({ ...data, slides: [...data.slides, ...result.slides] });
@@ -177,11 +199,11 @@ export default function App() {
   };
 
   const playTTSForSlide = (index: number) => {
-    if (!data || !data.slides[index]) return;
+    if (!data?.slides?.[index]) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(data.slides[index].speakerNotes || data.slides[index].heading);
+    const utterance = new SpeechSynthesisUtterance(data.slides[index].speakerNotes || data.slides[index].heading || "");
     utterance.onend = () => {
-      if (index < data.slides.length - 1 && presenterMode) {
+      if (index < (data.slides.length || 1) - 1 && presenterMode) {
         setActiveSlide(index + 1);
         setTimeout(() => playTTSForSlide(index + 1), 800);
       } else setIsSpeaking(false);
@@ -191,11 +213,15 @@ export default function App() {
   };
 
   const handleEdit = (type: 'heading' | 'point' | 'notes', val: string, idx?: number) => {
-    if (!data) return;
+    if (!data?.slides) return;
     const newData = { ...data };
+    if (!newData.slides[activeSlide]) return;
+    
     if (type === 'heading') newData.slides[activeSlide].heading = val;
     if (type === 'notes') newData.slides[activeSlide].speakerNotes = val;
-    if (type === 'point' && idx !== undefined) newData.slides[activeSlide].points[idx] = val;
+    if (type === 'point' && idx !== undefined && newData.slides[activeSlide].points) {
+      newData.slides[activeSlide].points![idx] = val;
+    }
     setData(newData);
   };
 
@@ -203,11 +229,10 @@ export default function App() {
   // 👑 GOD-LEVEL THEME ENGINE 
   // ==========================================
   const getSlideDesign = (isFullscreen = false) => {
-    const slide = data?.slides[activeSlide];
+    const slide = data?.slides?.[activeSlide];
     if (!slide) return null;
 
-    // ✅ FIXED: Bulletproof image URL generation with Seed
-    const safePrompt = slide.imagePrompt || slide.heading || topic;
+    const safePrompt = slide.imagePrompt || slide.heading || topic || "presentation abstract";
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
     
     const layout = slide.layout || "image_right";
@@ -218,18 +243,17 @@ export default function App() {
     // --- 1. MODERN THEME ---
     if (template === "modern") {
       const themes = [
-        { bg: "bg-[#09090B]", text: "text-white", accent: "bg-indigo-500", glow: "shadow-indigo-500/50", points: "text-slate-300", overlay: "bg-black/80" },
-        { bg: "bg-[#1E1B4B]", text: "text-white", accent: "bg-pink-500", glow: "shadow-pink-500/50", points: "text-indigo-200", overlay: "bg-[#1E1B4B]/80" },
-        { bg: "bg-[#0F172A]", text: "text-white", accent: "bg-sky-400", glow: "shadow-sky-400/50", points: "text-slate-300", overlay: "bg-[#0F172A]/80" }
+        { bg: "bg-[#09090B]", hex: "#09090B", text: "text-white", accent: "bg-indigo-500", glow: "shadow-indigo-500/50", points: "text-slate-300", overlay: "bg-black/80" },
+        { bg: "bg-[#1E1B4B]", hex: "#1E1B4B", text: "text-white", accent: "bg-pink-500", glow: "shadow-pink-500/50", points: "text-indigo-200", overlay: "bg-[#1E1B4B]/80" },
+        { bg: "bg-[#0F172A]", hex: "#0F172A", text: "text-white", accent: "bg-sky-400", glow: "shadow-sky-400/50", points: "text-slate-300", overlay: "bg-[#0F172A]/80" }
       ];
       const t = themes[variantIndex];
 
       return (
-        <div className={`w-full aspect-video flex overflow-hidden relative group ${t.bg} shadow-2xl ${isFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-3xl'}`}>
+        <div className={`w-full aspect-video flex overflow-hidden relative group ${t.bg} shadow-2xl ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent opacity-50 z-0" />
           <div className={`absolute top-0 left-0 right-0 h-2 ${t.accent} z-30`} />
           
-          {/* ✅ FIXED: Center Focus Background Image */}
           {layout === "center_focus" && (
             <div className="absolute inset-0 z-0">
                <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
@@ -239,17 +263,17 @@ export default function App() {
 
           {layout === "image_left" && (
             <div className="w-1/2 h-full relative border-r border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className={`absolute inset-0 bg-gradient-to-l from-${t.bg.replace('bg-[','').replace(']','')} via-transparent z-10`} />
+               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to left, ${t.hex}, transparent)` }} />
                <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
             </div>
           )}
 
           <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center ${t.text} relative z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
-            <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+            <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
               className={`text-3xl md:text-5xl font-extrabold mb-6 ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
             <div className={`w-16 h-1.5 ${t.accent} rounded-full mb-8 shadow-[0_0_20px] ${t.glow}`} />
             <ul className={`space-y-5 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl inline-block' : ''}`}>
-              {slide.points.map((p, i) => (
+              {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-2xl ${t.points}`}>
                   <span className={`${t.accent.replace('bg-','text-')} mt-1.5 opacity-80`}>✦</span>
                   <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
@@ -260,7 +284,7 @@ export default function App() {
 
           {layout === "image_right" && (
             <div className="w-1/2 h-full relative border-l border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className={`absolute inset-0 bg-gradient-to-r from-${t.bg.replace('bg-[','').replace(']','')} via-transparent z-10`} />
+               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to right, ${t.hex}, transparent)` }} />
                <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
             </div>
           )}
@@ -278,10 +302,9 @@ export default function App() {
       const t = themes[variantIndex];
 
       return (
-        <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-3xl'}`}>
+        <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
           <div className={`absolute top-0 left-0 right-0 h-3 ${t.accent} z-30`} />
           
-          {/* ✅ FIXED: Center Focus Background Image */}
           {layout === "center_focus" && (
             <div className="absolute inset-0 z-0">
                <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-30 blur-sm" />
@@ -296,11 +319,11 @@ export default function App() {
           )}
 
           <div className={`flex-1 p-8 md:p-14 h-full flex flex-col justify-center font-sans z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
-            <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+            <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
               className={`text-3xl md:text-4xl font-bold mb-4 ${t.text} ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
             <div className={`w-full h-px ${variantIndex === 1 ? 'bg-slate-700' : 'bg-slate-200'} mb-8`} />
             <ul className={`space-y-6 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl' : ''}`}>
-              {slide.points.map((p, i) => (
+              {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-xl font-medium ${t.points}`}>
                   <div className={`mt-2.5 w-2 h-2 ${t.accent} shrink-0`} />
                   <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
@@ -327,13 +350,11 @@ export default function App() {
     const t = themes[variantIndex];
 
     return (
-      <div className={`w-full aspect-video flex ${t.bg} shadow-2xl border ${t.border} overflow-hidden relative ${isFullscreen ? 'h-screen w-screen rounded-none' : 'rounded-3xl'}`}>
+      <div className={`w-full aspect-video flex ${t.bg} shadow-2xl border ${t.border} overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay z-0" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`}} />
-        
         <div className={`absolute top-0 left-0 right-0 h-4 ${variantIndex === 1 ? 'bg-black/40' : 'bg-slate-900'} z-30`} />
         <div className={`absolute top-4 left-0 right-0 h-1 ${t.accent} z-30`} />
         
-        {/* ✅ FIXED: Center Focus Background Image */}
         {layout === "center_focus" && (
           <div className="absolute inset-0 z-0">
              <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-20 sepia" />
@@ -348,11 +369,11 @@ export default function App() {
         )}
 
         <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center font-serif z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
-          <input value={slide.heading} onChange={(e) => handleEdit('heading', e.target.value)}
+          <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
             className={`text-3xl md:text-5xl font-bold mb-6 ${t.text} ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
           <div className={`w-24 h-1 ${t.accent} mb-8`} />
           <ul className={`space-y-6 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl' : ''}`}>
-            {slide.points.map((p, i) => (
+            {(slide.points || []).map((p, i) => (
               <li key={i} className={`flex items-start gap-4 text-lg md:text-xl ${t.points} leading-relaxed`}>
                 <span className={`${t.accentText} font-sans font-black mt-1`}>•</span>
                 <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
@@ -401,6 +422,64 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showScriptModal && (
+          <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-3xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-2xl font-bold flex items-center gap-2"><BookOpen className="text-indigo-500"/> Presentation Script</h2>
+                 <button onClick={() => setShowScriptModal(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-sm">Close</button>
+              </div>
+              <div className="space-y-6 text-slate-700 leading-relaxed">
+                {(fullScript || []).map((p, i) => (
+                  <div key={i} className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2 block">Slide {i + 1}</span>
+                    <p>{p}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* RESTORED PRESENTER MODE OVERLAY */}
+      <AnimatePresence>
+        {presenterMode && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black flex flex-col print:hidden">
+            <div className="w-full h-16 bg-black/50 px-6 flex items-center justify-between text-white/70 absolute top-0 z-50">
+               <div className="font-bold tracking-widest text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/> LIVE • {formatTime(presentationTimer)}</div>
+               <button onClick={() => setPresenterMode(false)} className="hover:text-white px-4 py-2 bg-white/10 rounded-xl transition-all font-bold text-sm">Exit (ESC)</button>
+            </div>
+            
+            <div className="flex-1 w-full h-full flex flex-col justify-center bg-black overflow-hidden pt-10">
+              <AnimatePresence mode="wait">
+                <motion.div key={activeSlide} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="w-full max-w-[1600px] mx-auto flex items-center justify-center p-8">
+                  {getSlideDesign(true)}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            <div className="h-auto min-h-[100px] bg-slate-900 w-full p-4 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-white/10 relative z-50">
+               <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl">
+                 <button onClick={() => setActiveSlide((s) => Math.max(0, s - 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronLeft /></button>
+                 <span className="text-white font-bold px-2">{activeSlide + 1} / {data?.slides?.length || 1}</span>
+                 <button onClick={() => setActiveSlide((s) => Math.min((data?.slides?.length || 1) - 1, s + 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronRight /></button>
+               </div>
+               
+               <button onClick={toggleTTS} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${isSpeaking ? 'bg-red-500 text-white' : 'bg-indigo-500 hover:bg-indigo-400 text-white'}`}>
+                 {isSpeaking ? <Pause className="w-5 h-5"/> : <Volume2 className="w-5 h-5"/>} {isSpeaking ? "Pause Narration" : "AI Voice Play"}
+               </button>
+
+               <div className="flex-1 max-w-2xl bg-black/40 p-4 rounded-2xl text-white/80 text-sm overflow-y-auto max-h-[120px] custom-scrollbar">
+                  <span className="text-xs text-indigo-400 font-bold block mb-1">NOTES:</span>
+                  {data?.slides?.[activeSlide]?.speakerNotes || "No presenter notes for this slide."}
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <aside className="w-full lg:w-[400px] bg-white border-r border-slate-200 flex flex-col lg:h-screen shadow-[10px_0_30px_rgba(0,0,0,0.02)] z-20 shrink-0 print:hidden">
         <div className="p-6 border-b border-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg"><Sparkles className="text-white w-5 h-5" /></div>
@@ -435,10 +514,11 @@ export default function App() {
             ))}
           </div>
 
-          {data && (
+          {data?.slides && (
             <div className="pt-4 border-t border-slate-100 space-y-2">
                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">God-Level Tools</label>
                <button onClick={extendSlides} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><PlusCircle className="w-4 h-4 text-emerald-500"/> Auto-Expand Deck (+4)</button>
+               <button onClick={generateSpeechScript} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><Mic className="w-4 h-4 text-purple-500"/> Generate Pitch Script</button>
             </div>
           )}
         </div>
@@ -461,7 +541,7 @@ export default function App() {
                  <p className="text-sm font-medium text-indigo-500 animate-pulse">{loadingMessages[loadingStep]}</p>
                </div>
              </div>
-          ) : !data ? (
+          ) : !data?.slides ? (
             <div className="m-auto text-center max-w-sm print:hidden">
               <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 transform -rotate-6 border border-slate-100"><Presentation className="w-10 h-10 text-indigo-400" /></div>
               <h2 className="text-2xl font-bold text-slate-800 mb-2">Blank Canvas</h2>
@@ -504,8 +584,8 @@ export default function App() {
               </div>
 
               <div className="mt-8 w-full max-w-4xl bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden text-left print:hidden mb-20">
-                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2 text-slate-800 font-bold text-sm uppercase"><Mic className="w-4 h-4 text-indigo-500" /> Presenter Notes</div>
-                <textarea value={data.slides[activeSlide].speakerNotes} onChange={(e) => handleEdit('notes', e.target.value)} rows={4} className="w-full p-6 text-slate-700 text-sm md:text-base leading-relaxed resize-none focus:outline-none focus:bg-slate-50 transition" />
+                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2 text-slate-800 font-bold text-sm uppercase"><Mic className="w-4 h-4 text-indigo-500" /> Presenter Notes (Editable)</div>
+                <textarea value={data.slides[activeSlide]?.speakerNotes || ""} onChange={(e) => handleEdit('notes', e.target.value)} rows={4} className="w-full p-6 text-slate-700 text-sm md:text-base leading-relaxed resize-none focus:outline-none focus:bg-slate-50 transition" />
               </div>
             </div>
           )}
