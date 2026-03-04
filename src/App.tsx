@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 interface Slide {
-  layout?: "image_right" | "image_left" | "center_focus";
+  layout?: "image_right";
   heading?: string;
   points?: string[];
   speakerNotes?: string;
@@ -299,7 +299,7 @@ export default function App() {
   };
 
   // ==========================================
-  // UNIFIED CONSISTENT THEME ENGINE
+  // UNIFIED CONSISTENT THEME ENGINE (FIXED)
   // ==========================================
   const getSlideDesign = (isFullscreen = false) => {
     const slide = data?.slides?.[activeSlide];
@@ -308,10 +308,9 @@ export default function App() {
     const safePrompt = slide.imagePrompt || slide.heading || topic || "presentation abstract";
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
     
-    const layout = slide.layout || "image_right";
     const baseInputStyle = "w-full bg-transparent border-2 border-transparent outline-none transition-all resize-none leading-tight";
     
-    // --- 1. MODERN THEME (Consistent Dark/Indigo) ---
+    // --- 1. MODERN THEME ---
     if (template === "modern") {
       const t = { 
         bg: "bg-[#09090B]", 
@@ -319,8 +318,7 @@ export default function App() {
         text: "text-white", 
         accent: "bg-indigo-500", 
         glow: "shadow-indigo-500/50", 
-        points: "text-slate-300", 
-        overlay: "bg-[#09090B]/80" 
+        points: "text-slate-300"
       };
 
       return (
@@ -328,25 +326,11 @@ export default function App() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent opacity-50 z-0" />
           <div className={`absolute top-0 left-0 right-0 h-2 ${t.accent} z-30`} />
           
-          {layout === "center_focus" && (
-            <div className="absolute inset-0 z-0">
-               <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
-               <div className={`absolute inset-0 ${t.overlay}`} />
-            </div>
-          )}
-
-          {layout === "image_left" && (
-            <div className="w-1/2 h-full relative border-r border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to left, ${t.hex}, transparent)` }} />
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
-            </div>
-          )}
-
-          <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center ${t.text} relative z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
+          <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center ${t.text} relative z-20`}>
             <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
-              className={`text-3xl md:text-5xl font-extrabold mb-6 ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
+              className={`text-3xl md:text-5xl font-extrabold mb-6 ${baseInputStyle}`} />
             <div className={`w-16 h-1.5 ${t.accent} rounded-full mb-8 shadow-[0_0_20px] ${t.glow}`} />
-            <ul className={`space-y-5 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl inline-block' : ''}`}>
+            <ul className={`space-y-5 overflow-y-auto custom-scrollbar`}>
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-2xl ${t.points}`}>
                   <span className={`text-indigo-400 mt-1.5 opacity-80`}>✦</span>
@@ -356,49 +340,33 @@ export default function App() {
             </ul>
           </div>
 
-          {layout === "image_right" && (
-            <div className="w-1/2 h-full relative border-l border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to right, ${t.hex}, transparent)` }} />
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
-            </div>
-          )}
+          <div className="w-1/2 h-full relative border-l border-white/10 group-hover:scale-105 transition duration-700 z-10">
+             <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to right, ${t.hex}, transparent)` }} />
+             <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
+          </div>
         </div>
       );
     }
 
-    // --- 2. BUSINESS THEME (Consistent Light/Corporate Blue) ---
+    // --- 2. BUSINESS THEME ---
     if (template === "business") {
       const t = { 
         bg: "bg-white", 
         text: "text-slate-900", 
         accent: "bg-blue-600", 
         border: "border-slate-200", 
-        points: "text-slate-600", 
-        overlay: "bg-white/90" 
+        points: "text-slate-600"
       };
 
       return (
         <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
           <div className={`absolute top-0 left-0 right-0 h-3 ${t.accent} z-30`} />
           
-          {layout === "center_focus" && (
-            <div className="absolute inset-0 z-0">
-               <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-30 blur-sm" />
-               <div className={`absolute inset-0 ${t.overlay}`} />
-            </div>
-          )}
-
-          {layout === "image_left" && (
-            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-slate-50 z-10">
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
-            </div>
-          )}
-
-          <div className={`flex-1 p-8 md:p-14 h-full flex flex-col justify-center font-sans z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
+          <div className={`flex-1 p-8 md:p-14 h-full flex flex-col justify-center font-sans z-20`}>
             <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
-              className={`text-3xl md:text-4xl font-bold mb-4 ${t.text} ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
+              className={`text-3xl md:text-4xl font-bold mb-4 ${t.text} ${baseInputStyle}`} />
             <div className={`w-full h-px bg-slate-200 mb-8`} />
-            <ul className={`space-y-6 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl' : ''}`}>
+            <ul className={`space-y-6 overflow-y-auto custom-scrollbar`}>
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-xl font-medium ${t.points}`}>
                   <div className={`mt-2.5 w-2 h-2 ${t.accent} shrink-0`} />
@@ -408,24 +376,21 @@ export default function App() {
             </ul>
           </div>
 
-          {layout === "image_right" && (
-            <div className="w-1/2 h-full p-8 flex items-center justify-center bg-slate-50 z-10">
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
-            </div>
-          )}
+          <div className="w-1/2 h-full p-8 flex items-center justify-center bg-slate-50 z-10">
+             <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
+          </div>
         </div>
       );
     }
 
-    // --- 3. ACADEMIC THEME (Consistent Paper/Teal) ---
+    // --- 3. ACADEMIC THEME ---
     const t = { 
       bg: "bg-[#FDFBF7]", 
       text: "text-slate-900", 
       accent: "bg-teal-800", 
       accentText: "text-teal-800", 
       points: "text-slate-700", 
-      border: "border-slate-800", 
-      overlay: "bg-[#FDFBF7]/90" 
+      border: "border-slate-800"
     };
 
     return (
@@ -434,24 +399,11 @@ export default function App() {
         <div className={`absolute top-0 left-0 right-0 h-4 bg-slate-900 z-30`} />
         <div className={`absolute top-4 left-0 right-0 h-1 ${t.accent} z-30`} />
         
-        {layout === "center_focus" && (
-          <div className="absolute inset-0 z-0">
-             <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-20 sepia" />
-             <div className={`absolute inset-0 ${t.overlay}`} />
-          </div>
-        )}
-
-        {layout === "image_left" && (
-          <div className="w-2/5 h-full p-10 flex items-center justify-center z-10">
-             <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
-          </div>
-        )}
-
-        <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center font-serif z-20 ${layout === "center_focus" ? 'items-center text-center' : ''}`}>
+        <div className={`flex-1 p-8 md:p-16 h-full flex flex-col justify-center font-serif z-20`}>
           <input value={slide.heading || ""} onChange={(e) => handleEdit('heading', e.target.value)}
-            className={`text-3xl md:text-5xl font-bold mb-6 ${t.text} ${baseInputStyle} ${layout === "center_focus" ? 'text-center' : ''}`} />
+            className={`text-3xl md:text-5xl font-bold mb-6 ${t.text} ${baseInputStyle}`} />
           <div className={`w-24 h-1 ${t.accent} mb-8`} />
-          <ul className={`space-y-6 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl' : ''}`}>
+          <ul className={`space-y-6 overflow-y-auto custom-scrollbar`}>
             {(slide.points || []).map((p, i) => (
               <li key={i} className={`flex items-start gap-4 text-lg md:text-xl ${t.points} leading-relaxed`}>
                 <span className={`${t.accentText} font-sans font-black mt-1`}>•</span>
@@ -461,11 +413,9 @@ export default function App() {
           </ul>
         </div>
 
-        {layout === "image_right" && (
-          <div className="w-2/5 h-full p-10 flex items-center justify-center z-10">
-             <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
-          </div>
-        )}
+        <div className="w-2/5 h-full p-10 flex items-center justify-center z-10">
+           <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
+        </div>
       </div>
     );
   };
