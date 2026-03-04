@@ -4,7 +4,7 @@ import {
   Sparkles, Layout, Briefcase, GraduationCap, Download, Loader2,
   Mic, Wand2, ChevronLeft, ChevronRight, RefreshCw, Presentation,
   FileText, AlertCircle, Play, Pause, CheckCircle2, MessageSquare,
-  PlusCircle, BookOpen, Volume2, Image as ImageIcon, Copy
+  PlusCircle, BookOpen, Volume2, Copy
 } from "lucide-react";
 
 interface Slide {
@@ -43,7 +43,6 @@ export default function App() {
   const [slideCount, setSlideCount] = useState(6);
   const [presenterMode, setPresenterMode] = useState(false);
   
-  // New State variables
   const [showScriptModal, setShowScriptModal] = useState(false);
   const [fullScript, setFullScript] = useState<string[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -196,14 +195,40 @@ export default function App() {
     showToast("Compiling PPTX... This takes a moment.", "success");
     try {
       const res = await fetch(`${API_BASE}/download-ppt`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, template }),
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ data, template }),
       });
-      const blob = await res.blob();
+      
+      // Prevent downloading error messages as PPTX
+      if (!res.ok) throw new Error("Server failed to generate file");
+      
+      const { fileName, fileData } = await res.json();
+      
+      // Safely convert base64 back to a binary Blob
+      const byteCharacters = window.atob(fileData);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+
+      // Trigger actual download
       const a = document.createElement("a");
-      a.href = window.URL.createObjectURL(blob);
-      a.download = `${data.title.replace(/[^a-z0-9]/gi, "_")}.pptx`;
+      const url = window.URL.createObjectURL(blob);
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
       a.click();
-    } catch (err) { showToast("PPT Export failed.", "error"); }
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      
+      showToast("PowerPoint downloaded successfully!", "success");
+    } catch (err) { 
+      console.error(err);
+      showToast("PPT Export failed.", "error"); 
+    }
   };
 
   const downloadMarkdown = () => {
@@ -292,7 +317,7 @@ export default function App() {
           <div className="w-16 h-1 bg-indigo-500 rounded-full mb-8 shadow-[0_0_15px_rgba(99,102,241,0.6)]" />
           <ul className="space-y-4 overflow-y-auto custom-scrollbar">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-4 text-sm md:text-2xl text-slate-300">
+              <li key={i} className="flex items-start gap-4 text-sm md:text-xl text-slate-300">
                 <span className="text-indigo-400 mt-1">✦</span>
                 <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} focus:bg-white/5 focus:border-indigo-500/50 hover:border-white/10 rounded-xl px-2 -mt-1`} />
               </li>
@@ -300,7 +325,7 @@ export default function App() {
           </ul>
         </div>
         {imgUrl && (
-          <div className="w-2/5 h-full relative border-l border-white/10 relative group">
+          <div className="w-2/5 h-full relative border-l border-white/10 group">
              <div className="absolute inset-0 bg-gradient-to-r from-[#09090B] via-transparent to-transparent z-10" />
              <img src={imgUrl} alt="Slide Visual" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
           </div>
@@ -318,8 +343,8 @@ export default function App() {
           <div className="w-full h-px bg-slate-200 mb-6" />
           <ul className="space-y-4 overflow-y-auto custom-scrollbar">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm md:text-xl text-slate-700 font-medium">
-                <div className="mt-2.5 w-2 h-2 bg-blue-600 shrink-0" />
+              <li key={i} className="flex items-start gap-3 text-sm md:text-lg text-slate-700 font-medium">
+                <div className="mt-2 w-2 h-2 bg-blue-600 shrink-0" />
                 <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} focus:bg-slate-50 focus:border-blue-200 hover:border-slate-200 rounded-xl px-2 -mt-1`} />
               </li>
             ))}
@@ -344,7 +369,7 @@ export default function App() {
           <div className="w-24 h-1 bg-teal-700 mb-6" />
           <ul className="space-y-4 overflow-y-auto custom-scrollbar">
             {slide.points.map((p, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm md:text-xl text-slate-700 leading-relaxed">
+              <li key={i} className="flex items-start gap-3 text-sm md:text-lg text-slate-700 leading-relaxed">
                 <span className="text-slate-400 font-sans font-bold mt-1">•</span>
                 <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} focus:bg-white focus:border-teal-200 hover:border-slate-200 rounded-xl px-2 -mt-1`} />
               </li>
