@@ -17,10 +17,10 @@ interface Slide {
 
 interface PresentationData {
   title?: string;
-  slides: Slide[];
+  slides?: Slide[];
 }
 
-// 🌐 EXACT BACKEND URL AS REQUESTED
+// 🌐 BACKEND URL
 const API_BASE = "https://slideforge-backend.onrender.com";
 
 const templates = [
@@ -60,7 +60,6 @@ export default function App() {
       const saved = localStorage.getItem("slideforge_autosave");
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Strict validation to prevent blank screen crashes from old data formats
         if (parsed && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
           setData(parsed);
           setActiveSlide(0);
@@ -69,22 +68,21 @@ export default function App() {
         }
       }
     } catch (e) {
-      console.error("Local storage cleared due to schema mismatch.");
       localStorage.removeItem("slideforge_autosave");
     }
   }, []);
 
   useEffect(() => {
-    if (data && Array.isArray(data.slides)) {
+    if (data && Array.isArray(data.slides) && data.slides.length > 0) {
       localStorage.setItem("slideforge_autosave", JSON.stringify(data));
     }
   }, [data]);
 
-  // Keyboard Shortcuts & Timer
+  // 🛡️ CRASH-PROOF KEYBOARD & TIMER
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!data?.slides) return;
-      if (e.key === "ArrowRight") setActiveSlide(s => Math.min((data.slides.length || 1) - 1, s + 1));
+      if (e.key === "ArrowRight") setActiveSlide(s => Math.min((data.slides?.length || 1) - 1, s + 1));
       if (e.key === "ArrowLeft") setActiveSlide(s => Math.max(0, s - 1));
       if (e.key === "Escape") setPresenterMode(false);
     };
@@ -95,7 +93,9 @@ export default function App() {
       timerRef.current = setInterval(() => setPresentationTimer(t => t + 1), 1000);
     } else {
       clearInterval(timerRef.current);
-      window.speechSynthesis.cancel();
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       setIsSpeaking(false);
     }
     return () => { window.removeEventListener("keydown", handleKeyDown); clearInterval(timerRef.current); };
@@ -130,11 +130,12 @@ export default function App() {
       showToast(successMsg, "success");
       return await res.json();
     } catch (err: any) {
-      showToast("Server is waking up. Please wait 30 seconds and try again.", "error");
+      showToast("Server might be waking up (Wait 30s) or AI Failed.", "error");
       return null;
     }
   };
 
+  // 🚀 GENERATE & EDIT FUNCTIONS
   const generateSlides = async () => {
     if (!topic.trim()) return;
     setLoading(true);
@@ -149,7 +150,7 @@ export default function App() {
     const current = data.slides[activeSlide];
     const result = await apiCall("/improve-slide", { heading: current.heading, points: current.points, tone }, "Design balanced!");
     if (result) {
-      const updated = [...data.slides];
+      const updated = [...(data.slides || [])];
       updated[activeSlide] = { ...current, ...result };
       setData({ ...data, slides: updated });
     }
@@ -162,7 +163,7 @@ export default function App() {
     const current = data.slides[activeSlide];
     const result = await apiCall("/rewrite-slide", { heading: current.heading, points: current.points, tone }, "Rewritten perfectly!");
     if (result) {
-      const updated = [...data.slides];
+      const updated = [...(data.slides || [])];
       updated[activeSlide] = { ...current, ...result };
       setData({ ...data, slides: updated });
     }
@@ -185,9 +186,9 @@ export default function App() {
     setLoading(false);
   };
 
-  // 🚀 BULLETPROOF DOWNLOAD PPTX
+  // 🚀 BULLETPROOF EXPORT FUNCTIONS
   const downloadPPT = async () => {
-    if (!data) return;
+    if (!data?.slides) return;
     setExporting(true);
     
     try {
@@ -215,7 +216,6 @@ export default function App() {
       
       showToast("Download Complete!", "success");
     } catch (err: any) { 
-      console.error("Download Error:", err);
       showToast("Export failed. Server may be waking up.", "error"); 
     } finally { 
       setExporting(false); 
@@ -244,18 +244,26 @@ export default function App() {
     setTimeout(() => window.print(), 500);
   };
 
+  // 🎙️ TTS FUNCTION
   const toggleTTS = () => {
-    if (isSpeaking) { window.speechSynthesis.cancel(); setIsSpeaking(false); } 
-    else playTTSForSlide(activeSlide);
+    if (isSpeaking) { 
+      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel(); 
+      setIsSpeaking(false); 
+    } else {
+      playTTSForSlide(activeSlide);
+    }
   };
 
   const playTTSForSlide = (index: number) => {
-    if (!data?.slides?.[index]) return;
+    if (!data?.slides?.[index] || typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const textToRead = data.slides[index].speakerNotes || data.slides[index].heading || "No text available.";
+    
+    const slide = data.slides[index];
+    const textToRead = slide.speakerNotes || slide.heading || "No text available.";
     const utterance = new SpeechSynthesisUtterance(textToRead);
+    
     utterance.onend = () => {
-      if (index < (data.slides.length || 1) - 1 && presenterMode) {
+      if (index < (data.slides?.length || 1) - 1 && presenterMode) {
         setActiveSlide(index + 1);
         setTimeout(() => playTTSForSlide(index + 1), 800);
       } else setIsSpeaking(false);
@@ -264,15 +272,16 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
+  // ✏️ LIVE EDIT
   const handleEdit = (type: 'heading' | 'point' | 'notes', val: string, idx?: number) => {
-    if (!data?.slides) return;
+    if (!data?.slides?.[activeSlide]) return;
     const newData = { ...data };
-    if (!newData.slides[activeSlide]) return;
+    if (!newData.slides) return;
     
     if (type === 'heading') newData.slides[activeSlide].heading = val;
     if (type === 'notes') newData.slides[activeSlide].speakerNotes = val;
     if (type === 'point' && idx !== undefined && newData.slides[activeSlide].points) {
-      newData.slides[activeSlide].points[idx] = val;
+      newData.slides[activeSlide].points![idx] = val;
     }
     setData(newData);
   };
@@ -282,9 +291,7 @@ export default function App() {
   // ==========================================
   const getSlideDesign = (isFullscreen = false) => {
     const slide = data?.slides?.[activeSlide];
-    
-    // Safety check to prevent blank screen crashes
-    if (!slide) return <div className="w-full aspect-video bg-white rounded-3xl flex items-center justify-center text-slate-400">Loading slide...</div>;
+    if (!slide) return <div className="w-full aspect-video bg-white rounded-3xl flex items-center justify-center text-slate-400">Preparing slide...</div>;
 
     const safePrompt = slide.imagePrompt || slide.heading || topic || "presentation abstract";
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
@@ -511,7 +518,7 @@ export default function App() {
             
             <div className="flex-1 w-full h-full flex flex-col justify-center bg-black overflow-hidden pt-10">
               <AnimatePresence mode="wait">
-                <motion.div key={activeSlide} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="w-full max-w-[1600px] mx-auto flex items-center justify-center p-8">
+                <motion.div key={activeSlide} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="w-full max-w-[1600px] mx-auto flex items-center justify-center p-8 h-full">
                   {getSlideDesign(true)}
                 </motion.div>
               </AnimatePresence>
@@ -572,7 +579,7 @@ export default function App() {
             ))}
           </div>
 
-          {data?.slides && (
+          {data?.slides && data.slides.length > 0 && (
             <div className="pt-4 border-t border-slate-100 space-y-2">
                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">God-Level Tools</label>
                <button onClick={extendSlides} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><PlusCircle className="w-4 h-4 text-emerald-500"/> Auto-Expand Deck (+4)</button>
@@ -610,7 +617,7 @@ export default function App() {
               
               <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 print:hidden">
                  <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 font-bold text-sm text-slate-600 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Slide {activeSlide + 1} / {data.slides.length}
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Slide {activeSlide + 1} / {data.slides.length || 1}
                  </div>
                  <div className="flex flex-wrap gap-3">
                     <button onClick={() => setPresenterMode(true)} className="px-5 py-2.5 bg-slate-900 text-white hover:bg-black rounded-full text-sm font-bold flex items-center gap-2 shadow-lg transition-all hover:scale-105"><Play className="w-4 h-4 fill-current" /> Present</button>
@@ -630,7 +637,7 @@ export default function App() {
 
               {/* PDF Print Output Block */}
               <div className="hidden print:block w-full">
-                 {data.slides.map((s, idx) => (
+                 {(data.slides || []).map((s, idx) => (
                    <div key={idx} className="w-[100vw] h-[100vh] flex items-center justify-center page-break-after-always p-10">
                       <div className="w-full aspect-video border-2 border-black flex overflow-hidden">
                         <div className="p-10 flex-1 flex flex-col justify-center">
@@ -645,8 +652,8 @@ export default function App() {
               <div className="mt-8 bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-2 flex justify-center items-center gap-2 z-10 print:hidden">
                 <div className="flex items-center">
                   <button onClick={() => setActiveSlide((s) => Math.max(0, s - 1))} disabled={activeSlide === 0} className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-                  <div className="px-4 text-sm font-bold text-slate-700 w-24 text-center">{activeSlide + 1} / {data.slides.length}</div>
-                  <button onClick={() => setActiveSlide((s) => Math.min(data.slides.length - 1, s + 1))} disabled={activeSlide === data.slides.length - 1} className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"><ChevronRight className="w-5 h-5" /></button>
+                  <div className="px-4 text-sm font-bold text-slate-700 w-24 text-center">{activeSlide + 1} / {data.slides.length || 1}</div>
+                  <button onClick={() => setActiveSlide((s) => Math.min((data.slides?.length || 1) - 1, s + 1))} disabled={activeSlide === (data.slides?.length || 1) - 1} className="p-3 hover:bg-slate-100 rounded-xl disabled:opacity-30 transition-colors"><ChevronRight className="w-5 h-5" /></button>
                 </div>
                 <div className="w-px h-8 bg-slate-200 mx-2" />
                 <button onClick={improveSlide} disabled={improving} className="px-4 py-2 hover:bg-amber-50 text-slate-700 rounded-xl flex items-center gap-2 font-bold text-sm transition group">
@@ -659,20 +666,12 @@ export default function App() {
 
               <div className="mt-8 w-full max-w-4xl bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden text-left print:hidden mb-20">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center gap-2 text-slate-800 font-bold text-sm uppercase"><Mic className="w-4 h-4 text-indigo-500" /> Presenter Notes (Editable)</div>
-                <textarea value={data.slides[activeSlide]?.speakerNotes || ""} onChange={(e) => handleEdit('notes', e.target.value)} rows={4} className="w-full p-6 text-slate-700 text-sm md:text-base leading-relaxed resize-none focus:outline-none focus:bg-slate-50 transition" />
+                <textarea value={data.slides?.[activeSlide]?.speakerNotes || ""} onChange={(e) => handleEdit('notes', e.target.value)} rows={4} className="w-full p-6 text-slate-700 text-sm md:text-base leading-relaxed resize-none focus:outline-none focus:bg-slate-50 transition" />
               </div>
             </div>
           )}
         </div>
       </main>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 20px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(156, 163, 175, 0.7); }
-        @media print { @page { size: landscape; margin: 0; } }
-      `}} />
     </div>
   );
 }
