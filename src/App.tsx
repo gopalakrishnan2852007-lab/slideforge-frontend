@@ -31,19 +31,21 @@ const templates = [
 
 type TemplateID = typeof templates[number]["id"];
 
+const tones = ["Professional", "Casual", "Inspirational", "Academic", "Humorous"];
+
 export default function App() {
   const [topic, setTopic] = useState("");
   const [template, setTemplate] = useState<TemplateID>("modern");
   const [tone, setTone] = useState("Professional");
   const [data, setData] = useState<PresentationData | null>(null);
-  
+
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [improving, setImproving] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideCount, setSlideCount] = useState(6);
   const [presenterMode, setPresenterMode] = useState(false);
-  
+
   const [showScriptModal, setShowScriptModal] = useState(false);
   const [fullScript, setFullScript] = useState<string[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -87,7 +89,7 @@ export default function App() {
       if (e.key === "Escape") setPresenterMode(false);
     };
     window.addEventListener("keydown", handleKeyDown);
-    
+
     if (presenterMode) {
       setPresentationTimer(0);
       timerRef.current = setInterval(() => setPresentationTimer(t => t + 1), 1000);
@@ -190,16 +192,16 @@ export default function App() {
   const downloadPPT = async () => {
     if (!data?.slides) return;
     setExporting(true);
-    
+
     try {
       const res = await fetch(`${API_BASE}/download-ppt`, {
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data, template }),
       });
-      
+
       if (!res.ok) throw new Error("Server failed to generate file.");
-      
+
       const { fileName, fileData } = await res.json();
       const dataUrl = `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${fileData}`;
       const base64Response = await fetch(dataUrl);
@@ -213,12 +215,12 @@ export default function App() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      
+
       showToast("Download Complete!", "success");
-    } catch (err: any) { 
-      showToast("Export failed. Server may be waking up.", "error"); 
-    } finally { 
-      setExporting(false); 
+    } catch (err: any) {
+      showToast("Export failed. Server may be waking up.", "error");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -246,9 +248,9 @@ export default function App() {
 
   // 🎙️ TTS FUNCTION
   const toggleTTS = () => {
-    if (isSpeaking) { 
-      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel(); 
-      setIsSpeaking(false); 
+    if (isSpeaking) {
+      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+      setIsSpeaking(false);
     } else {
       playTTSForSlide(activeSlide);
     }
@@ -257,11 +259,11 @@ export default function App() {
   const playTTSForSlide = (index: number) => {
     if (!data?.slides?.[index] || typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    
+
     const slide = data.slides[index];
     const textToRead = slide.speakerNotes || slide.heading || "No text available.";
     const utterance = new SpeechSynthesisUtterance(textToRead);
-    
+
     utterance.onend = () => {
       if (index < (data.slides?.length || 1) - 1 && presenterMode) {
         setActiveSlide(index + 1);
@@ -277,7 +279,7 @@ export default function App() {
     if (!data?.slides?.[activeSlide]) return;
     const newData = { ...data };
     if (!newData.slides) return;
-    
+
     if (type === 'heading') newData.slides[activeSlide].heading = val;
     if (type === 'notes') newData.slides[activeSlide].speakerNotes = val;
     if (type === 'point' && idx !== undefined && newData.slides[activeSlide].points) {
@@ -295,12 +297,12 @@ export default function App() {
 
     const safePrompt = slide.imagePrompt || slide.heading || topic || "presentation abstract";
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
-    
+
     const layout = slide.layout || "image_right";
-    const variantIndex = (activeSlide + 1) % 3; 
+    const variantIndex = (activeSlide + 1) % 3;
 
     const baseInputStyle = "w-full bg-transparent border-2 border-transparent outline-none transition-all resize-none leading-tight";
-    
+
     // --- 1. MODERN THEME ---
     if (template === "modern") {
       const themes = [
@@ -314,18 +316,18 @@ export default function App() {
         <div className={`w-full aspect-video flex overflow-hidden relative group ${t.bg} shadow-2xl ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/5 via-transparent to-transparent opacity-50 z-0" />
           <div className={`absolute top-0 left-0 right-0 h-2 ${t.accent} z-30`} />
-          
+
           {layout === "center_focus" && (
             <div className="absolute inset-0 z-0">
-               <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
-               <div className={`absolute inset-0 ${t.overlay}`} />
+              <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-40 blur-sm scale-105" />
+              <div className={`absolute inset-0 ${t.overlay}`} />
             </div>
           )}
 
           {layout === "image_left" && (
             <div className="w-1/2 h-full relative border-r border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to left, ${t.hex}, transparent)` }} />
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to left, ${t.hex}, transparent)` }} />
+              <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
             </div>
           )}
 
@@ -336,7 +338,7 @@ export default function App() {
             <ul className={`space-y-5 overflow-y-auto custom-scrollbar ${layout === "center_focus" ? 'text-left max-w-3xl inline-block' : ''}`}>
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-2xl ${t.points}`}>
-                  <span className={`${t.accent.replace('bg-','text-')} mt-1.5 opacity-80`}>✦</span>
+                  <span className={`${t.accent.replace('bg-', 'text-')} mt-1.5 opacity-80`}>✦</span>
                   <textarea value={p || ""} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
                 </li>
               ))}
@@ -345,8 +347,8 @@ export default function App() {
 
           {layout === "image_right" && (
             <div className="w-1/2 h-full relative border-l border-white/10 group-hover:scale-105 transition duration-700 z-10">
-               <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to right, ${t.hex}, transparent)` }} />
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 z-10" style={{ background: `linear-gradient(to right, ${t.hex}, transparent)` }} />
+              <img src={imgUrl} alt="Visual" className="w-full h-full object-cover" />
             </div>
           )}
         </div>
@@ -365,17 +367,17 @@ export default function App() {
       return (
         <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
           <div className={`absolute top-0 left-0 right-0 h-3 ${t.accent} z-30`} />
-          
+
           {layout === "center_focus" && (
             <div className="absolute inset-0 z-0">
-               <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-30 blur-sm" />
-               <div className={`absolute inset-0 ${t.overlay}`} />
+              <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-30 blur-sm" />
+              <div className={`absolute inset-0 ${t.overlay}`} />
             </div>
           )}
 
           {layout === "image_left" && (
             <div className="w-1/2 h-full p-8 flex items-center justify-center bg-black/5 z-10">
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
+              <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
             </div>
           )}
 
@@ -395,7 +397,7 @@ export default function App() {
 
           {layout === "image_right" && (
             <div className="w-1/2 h-full p-8 flex items-center justify-center bg-black/5 z-10">
-               <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
+              <img src={imgUrl} alt="Visual" className="w-full h-full object-cover shadow-lg rounded-xl" />
             </div>
           )}
         </div>
@@ -412,20 +414,20 @@ export default function App() {
 
     return (
       <div className={`w-full aspect-video flex ${t.bg} shadow-2xl border ${t.border} overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
-        <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay z-0" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`}} />
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay z-0" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
         <div className={`absolute top-0 left-0 right-0 h-4 ${variantIndex === 1 ? 'bg-black/40' : 'bg-slate-900'} z-30`} />
         <div className={`absolute top-4 left-0 right-0 h-1 ${t.accent} z-30`} />
-        
+
         {layout === "center_focus" && (
           <div className="absolute inset-0 z-0">
-             <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-20 sepia" />
-             <div className={`absolute inset-0 ${t.overlay}`} />
+            <img src={imgUrl} alt="Background" className="w-full h-full object-cover opacity-20 sepia" />
+            <div className={`absolute inset-0 ${t.overlay}`} />
           </div>
         )}
 
         {layout === "image_left" && (
           <div className="w-2/5 h-full p-10 flex items-center justify-center z-10">
-             <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
+            <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
           </div>
         )}
 
@@ -445,7 +447,7 @@ export default function App() {
 
         {layout === "image_right" && (
           <div className="w-2/5 h-full p-10 flex items-center justify-center z-10">
-             <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
+            <img src={imgUrl} alt="Visual" className={`w-full h-auto max-h-full object-cover shadow-[8px_8px_0px_rgba(0,0,0,0.2)] border-2 ${t.border}`} />
           </div>
         )}
       </div>
@@ -454,7 +456,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col lg:flex-row font-sans text-slate-900 lg:overflow-hidden print:bg-white print:block">
-      
+
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
@@ -472,14 +474,14 @@ export default function App() {
         {exporting && (
           <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm text-center">
-               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 border border-indigo-100">
-                  <Download className="w-8 h-8 text-indigo-600 animate-bounce" />
-               </div>
-               <h3 className="text-xl font-bold text-slate-800 mb-2">Rendering Deck...</h3>
-               <p className="text-sm text-slate-500 mb-6">Compiling AI images and layouts. Please do not close the window.</p>
-               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full w-full animate-pulse" />
-               </div>
+              <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 border border-indigo-100">
+                <Download className="w-8 h-8 text-indigo-600 animate-bounce" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Rendering Deck...</h3>
+              <p className="text-sm text-slate-500 mb-6">Compiling AI images and layouts. Please do not close the window.</p>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full w-full animate-pulse" />
+              </div>
             </motion.div>
           </div>
         )}
@@ -491,8 +493,8 @@ export default function App() {
           <div className="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-3xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                 <h2 className="text-2xl font-bold flex items-center gap-2"><BookOpen className="text-indigo-500"/> Presentation Script</h2>
-                 <button onClick={() => setShowScriptModal(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-sm">Close</button>
+                <h2 className="text-2xl font-bold flex items-center gap-2"><BookOpen className="text-indigo-500" /> Presentation Script</h2>
+                <button onClick={() => setShowScriptModal(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-sm">Close</button>
               </div>
               <div className="space-y-6 text-slate-700 leading-relaxed">
                 {(fullScript || []).map((p, i) => (
@@ -512,10 +514,10 @@ export default function App() {
         {presenterMode && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-black flex flex-col print:hidden">
             <div className="w-full h-16 bg-black/50 px-6 flex items-center justify-between text-white/70 absolute top-0 z-50">
-               <div className="font-bold tracking-widest text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/> LIVE • {formatTime(presentationTimer)}</div>
-               <button onClick={() => setPresenterMode(false)} className="hover:text-white px-4 py-2 bg-white/10 rounded-xl transition-all font-bold text-sm">Exit (ESC)</button>
+              <div className="font-bold tracking-widest text-sm flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> LIVE • {formatTime(presentationTimer)}</div>
+              <button onClick={() => setPresenterMode(false)} className="hover:text-white px-4 py-2 bg-white/10 rounded-xl transition-all font-bold text-sm">Exit (ESC)</button>
             </div>
-            
+
             <div className="flex-1 w-full h-full flex flex-col justify-center bg-black overflow-hidden pt-10">
               <AnimatePresence mode="wait">
                 <motion.div key={activeSlide} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="w-full max-w-[1600px] mx-auto flex items-center justify-center p-8 h-full">
@@ -525,20 +527,20 @@ export default function App() {
             </div>
 
             <div className="h-auto min-h-[100px] bg-slate-900 w-full p-4 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-white/10 relative z-50">
-               <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl">
-                 <button onClick={() => setActiveSlide((s) => Math.max(0, s - 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronLeft /></button>
-                 <span className="text-white font-bold px-2">{activeSlide + 1} / {data?.slides?.length || 1}</span>
-                 <button onClick={() => setActiveSlide((s) => Math.min((data?.slides?.length || 1) - 1, s + 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronRight /></button>
-               </div>
-               
-               <button onClick={toggleTTS} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${isSpeaking ? 'bg-red-500 text-white' : 'bg-indigo-500 hover:bg-indigo-400 text-white'}`}>
-                 {isSpeaking ? <Pause className="w-5 h-5"/> : <Volume2 className="w-5 h-5"/>} {isSpeaking ? "Pause Narration" : "AI Voice Play"}
-               </button>
+              <div className="flex items-center gap-4 bg-black/40 p-2 rounded-2xl">
+                <button onClick={() => setActiveSlide((s) => Math.max(0, s - 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronLeft /></button>
+                <span className="text-white font-bold px-2">{activeSlide + 1} / {data?.slides?.length || 1}</span>
+                <button onClick={() => setActiveSlide((s) => Math.min((data?.slides?.length || 1) - 1, s + 1))} className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-white transition"><ChevronRight /></button>
+              </div>
 
-               <div className="flex-1 max-w-2xl bg-black/40 p-4 rounded-2xl text-white/80 text-sm overflow-y-auto max-h-[120px] custom-scrollbar">
-                  <span className="text-xs text-indigo-400 font-bold block mb-1">NOTES:</span>
-                  {data?.slides?.[activeSlide]?.speakerNotes || "No presenter notes for this slide."}
-               </div>
+              <button onClick={toggleTTS} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg ${isSpeaking ? 'bg-red-500 text-white' : 'bg-indigo-500 hover:bg-indigo-400 text-white'}`}>
+                {isSpeaking ? <Pause className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />} {isSpeaking ? "Pause Narration" : "AI Voice Play"}
+              </button>
+
+              <div className="flex-1 max-w-2xl bg-black/40 p-4 rounded-2xl text-white/80 text-sm overflow-y-auto max-h-[120px] custom-scrollbar">
+                <span className="text-xs text-indigo-400 font-bold block mb-1">NOTES:</span>
+                {data?.slides?.[activeSlide]?.speakerNotes || "No presenter notes for this slide."}
+              </div>
             </div>
           </motion.div>
         )}
@@ -581,9 +583,9 @@ export default function App() {
 
           {data?.slides && data.slides.length > 0 && (
             <div className="pt-4 border-t border-slate-100 space-y-2">
-               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">God-Level Tools</label>
-               <button onClick={extendSlides} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><PlusCircle className="w-4 h-4 text-emerald-500"/> Auto-Expand Deck (+4)</button>
-               <button onClick={generateSpeechScript} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><Mic className="w-4 h-4 text-purple-500"/> Generate Pitch Script</button>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">God-Level Tools</label>
+              <button onClick={extendSlides} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><PlusCircle className="w-4 h-4 text-emerald-500" /> Auto-Expand Deck (+4)</button>
+              <button onClick={generateSpeechScript} disabled={loading} className="w-full p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold flex items-center gap-3 text-slate-700 transition"><Mic className="w-4 h-4 text-purple-500" /> Generate Pitch Script</button>
             </div>
           )}
         </div>
@@ -597,15 +599,15 @@ export default function App() {
 
       <main ref={canvasRef} className="w-full flex-1 relative flex flex-col min-h-screen lg:overflow-y-auto bg-[#F8FAFC] bg-[radial-gradient(#CBD5E1_1px,transparent_1px)] [background-size:24px_24px] print:bg-none">
         <div className="flex-1 p-4 lg:p-10 flex flex-col items-center">
-          
+
           {loading ? (
-             <div className="m-auto flex flex-col items-center gap-6 print:hidden">
-               <div className="relative"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10" /></div>
-               <div className="text-center">
-                 <h3 className="font-bold text-slate-800 text-xl mb-1">Architecting AI Presentation...</h3>
-                 <p className="text-sm font-medium text-indigo-500 animate-pulse">{loadingMessages[loadingStep]}</p>
-               </div>
-             </div>
+            <div className="m-auto flex flex-col items-center gap-6 print:hidden">
+              <div className="relative"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin relative z-10" /></div>
+              <div className="text-center">
+                <h3 className="font-bold text-slate-800 text-xl mb-1">Architecting AI Presentation...</h3>
+                <p className="text-sm font-medium text-indigo-500 animate-pulse">{loadingMessages[loadingStep]}</p>
+              </div>
+            </div>
           ) : !data?.slides ? (
             <div className="m-auto text-center max-w-sm print:hidden">
               <div className="w-24 h-24 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 transform -rotate-6 border border-slate-100"><Presentation className="w-10 h-10 text-indigo-400" /></div>
@@ -614,17 +616,17 @@ export default function App() {
             </div>
           ) : (
             <div className="w-full max-w-[1280px] flex flex-col items-center print:block print:w-full">
-              
+
               <div className="w-full flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 print:hidden">
-                 <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 font-bold text-sm text-slate-600 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Slide {activeSlide + 1} / {data.slides.length || 1}
-                 </div>
-                 <div className="flex flex-wrap gap-3">
-                    <button onClick={() => setPresenterMode(true)} className="px-5 py-2.5 bg-slate-900 text-white hover:bg-black rounded-full text-sm font-bold flex items-center gap-2 shadow-lg transition-all hover:scale-105"><Play className="w-4 h-4 fill-current" /> Present</button>
-                    <button onClick={downloadPPT} className="px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Download className="w-4 h-4"/> PPTX</button>
-                    <button onClick={downloadMarkdown} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Copy className="w-4 h-4"/> Markdown</button>
-                    <button onClick={printToPDF} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><FileText className="w-4 h-4"/> PDF</button>
-                 </div>
+                <div className="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 font-bold text-sm text-slate-600 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Slide {activeSlide + 1} / {data.slides.length || 1}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={() => setPresenterMode(true)} className="px-5 py-2.5 bg-slate-900 text-white hover:bg-black rounded-full text-sm font-bold flex items-center gap-2 shadow-lg transition-all hover:scale-105"><Play className="w-4 h-4 fill-current" /> Present</button>
+                  <button onClick={downloadPPT} className="px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Download className="w-4 h-4" /> PPTX</button>
+                  <button onClick={downloadMarkdown} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><Copy className="w-4 h-4" /> Markdown</button>
+                  <button onClick={printToPDF} className="px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-sm font-bold flex items-center gap-2 transition-all"><FileText className="w-4 h-4" /> PDF</button>
+                </div>
               </div>
 
               <div className="w-full print:hidden">
@@ -637,16 +639,16 @@ export default function App() {
 
               {/* PDF Print Output Block */}
               <div className="hidden print:block w-full">
-                 {(data.slides || []).map((s, idx) => (
-                   <div key={idx} className="w-[100vw] h-[100vh] flex items-center justify-center page-break-after-always p-10">
-                      <div className="w-full aspect-video border-2 border-black flex overflow-hidden">
-                        <div className="p-10 flex-1 flex flex-col justify-center">
-                           <h1 className="text-5xl font-bold mb-6">{s.heading || ""}</h1>
-                           <ul className="space-y-4">{(s.points || []).map((p,i) => <li key={i} className="text-2xl">• {p}</li>)}</ul>
-                        </div>
+                {(data.slides || []).map((s, idx) => (
+                  <div key={idx} className="w-[100vw] h-[100vh] flex items-center justify-center page-break-after-always p-10">
+                    <div className="w-full aspect-video border-2 border-black flex overflow-hidden">
+                      <div className="p-10 flex-1 flex flex-col justify-center">
+                        <h1 className="text-5xl font-bold mb-6">{s.heading || ""}</h1>
+                        <ul className="space-y-4">{(s.points || []).map((p, i) => <li key={i} className="text-2xl">• {p}</li>)}</ul>
                       </div>
-                   </div>
-                 ))}
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="mt-8 bg-white/80 backdrop-blur-md border border-slate-200 shadow-xl rounded-2xl p-2 flex justify-center items-center gap-2 z-10 print:hidden">
