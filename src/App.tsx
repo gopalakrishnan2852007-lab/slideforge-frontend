@@ -20,7 +20,8 @@ interface PresentationData {
   slides: Slide[];
 }
 
-const API_BASE = "https://slideforge-backend.onrender.com"; // Keep this pointing to your Render backend
+// 🌐 EXACT BACKEND URL AS REQUESTED
+const API_BASE = "https://slideforge-backend.onrender.com";
 
 const templates = [
   { id: "modern", icon: Layout, label: "Modern", color: "bg-indigo-600" },
@@ -53,21 +54,30 @@ export default function App() {
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Auto-Save Safety
+  // 🛡️ CRASH-PROOF AUTO-SAVE LOADER
   useEffect(() => {
     try {
       const saved = localStorage.getItem("slideforge_autosave");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.slides)) setData(parsed);
+        // Strict validation to prevent blank screen crashes from old data formats
+        if (parsed && Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+          setData(parsed);
+          setActiveSlide(0);
+        } else {
+          localStorage.removeItem("slideforge_autosave");
+        }
       }
     } catch (e) {
+      console.error("Local storage cleared due to schema mismatch.");
       localStorage.removeItem("slideforge_autosave");
     }
   }, []);
 
   useEffect(() => {
-    if (data) localStorage.setItem("slideforge_autosave", JSON.stringify(data));
+    if (data && Array.isArray(data.slides)) {
+      localStorage.setItem("slideforge_autosave", JSON.stringify(data));
+    }
   }, [data]);
 
   // Keyboard Shortcuts & Timer
@@ -120,7 +130,7 @@ export default function App() {
       showToast(successMsg, "success");
       return await res.json();
     } catch (err: any) {
-      showToast(err.message || "Action failed. Server might be waking up.", "error");
+      showToast("Server is waking up. Please wait 30 seconds and try again.", "error");
       return null;
     }
   };
@@ -168,17 +178,17 @@ export default function App() {
   };
 
   const generateSpeechScript = async () => {
-    if (!data) return;
+    if (!data?.slides) return;
     setLoading(true);
     const result = await apiCall("/generate-script", { slides: data.slides }, "Full script generated!");
     if (result?.script) { setFullScript(result.script); setShowScriptModal(true); }
     setLoading(false);
   };
 
-  // 🚀 THE BULLETPROOF DOWNLOAD FIX
+  // 🚀 BULLETPROOF DOWNLOAD PPTX
   const downloadPPT = async () => {
     if (!data) return;
-    setExporting(true); // Shows the cinematic loading modal
+    setExporting(true);
     
     try {
       const res = await fetch(`${API_BASE}/download-ppt`, {
@@ -187,22 +197,17 @@ export default function App() {
         body: JSON.stringify({ data, template }),
       });
       
-      if (!res.ok) {
-        throw new Error("Server failed to generate file.");
-      }
+      if (!res.ok) throw new Error("Server failed to generate file.");
       
       const { fileName, fileData } = await res.json();
-      
-      // Use browser Fetch API to safely decode massive Base64 strings (prevents memory crashes)
       const dataUrl = `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${fileData}`;
       const base64Response = await fetch(dataUrl);
       const blob = await base64Response.blob();
 
-      // Trigger actual download
       const a = document.createElement("a");
       const url = window.URL.createObjectURL(blob);
       a.href = url;
-      a.download = fileName;
+      a.download = fileName || "presentation.pptx";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -211,22 +216,17 @@ export default function App() {
       showToast("Download Complete!", "success");
     } catch (err: any) { 
       console.error("Download Error:", err);
-      // Let the user know if the Render backend is asleep!
-      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-        showToast("Server is waking up... Please try again in 30 seconds!", "error");
-      } else {
-        showToast("Export failed. Please try again.", "error"); 
-      }
+      showToast("Export failed. Server may be waking up.", "error"); 
     } finally { 
       setExporting(false); 
     }
   };
 
   const downloadMarkdown = () => {
-    if (!data) return;
-    let md = `# ${data.title}\n\n`;
+    if (!data?.slides) return;
+    let md = `# ${data.title || "Presentation"}\n\n`;
     data.slides.forEach((s, i) => {
-      md += `## ${i + 1}. ${s.heading}\n\n`;
+      md += `## ${i + 1}. ${s.heading || "Slide"}\n\n`;
       s.points?.forEach(p => md += `- ${p}\n`);
       if (s.speakerNotes) md += `\n**Speaker Notes:** ${s.speakerNotes}\n`;
       md += `\n---\n\n`;
@@ -252,7 +252,8 @@ export default function App() {
   const playTTSForSlide = (index: number) => {
     if (!data?.slides?.[index]) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(data.slides[index].speakerNotes || data.slides[index].heading || "");
+    const textToRead = data.slides[index].speakerNotes || data.slides[index].heading || "No text available.";
+    const utterance = new SpeechSynthesisUtterance(textToRead);
     utterance.onend = () => {
       if (index < (data.slides.length || 1) - 1 && presenterMode) {
         setActiveSlide(index + 1);
@@ -271,7 +272,7 @@ export default function App() {
     if (type === 'heading') newData.slides[activeSlide].heading = val;
     if (type === 'notes') newData.slides[activeSlide].speakerNotes = val;
     if (type === 'point' && idx !== undefined && newData.slides[activeSlide].points) {
-      newData.slides[activeSlide].points![idx] = val;
+      newData.slides[activeSlide].points[idx] = val;
     }
     setData(newData);
   };
@@ -281,7 +282,9 @@ export default function App() {
   // ==========================================
   const getSlideDesign = (isFullscreen = false) => {
     const slide = data?.slides?.[activeSlide];
-    if (!slide) return null;
+    
+    // Safety check to prevent blank screen crashes
+    if (!slide) return <div className="w-full aspect-video bg-white rounded-3xl flex items-center justify-center text-slate-400">Loading slide...</div>;
 
     const safePrompt = slide.imagePrompt || slide.heading || topic || "presentation abstract";
     const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=1024&height=1024&nologo=true&seed=${activeSlide}`;
@@ -298,7 +301,7 @@ export default function App() {
         { bg: "bg-[#1E1B4B]", hex: "#1E1B4B", text: "text-white", accent: "bg-pink-500", glow: "shadow-pink-500/50", points: "text-indigo-200", overlay: "bg-[#1E1B4B]/80" },
         { bg: "bg-[#0F172A]", hex: "#0F172A", text: "text-white", accent: "bg-sky-400", glow: "shadow-sky-400/50", points: "text-slate-300", overlay: "bg-[#0F172A]/80" }
       ];
-      const t = themes[variantIndex];
+      const t = themes[variantIndex] || themes[0];
 
       return (
         <div className={`w-full aspect-video flex overflow-hidden relative group ${t.bg} shadow-2xl ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
@@ -327,7 +330,7 @@ export default function App() {
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-2xl ${t.points}`}>
                   <span className={`${t.accent.replace('bg-','text-')} mt-1.5 opacity-80`}>✦</span>
-                  <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
+                  <textarea value={p || ""} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
                 </li>
               ))}
             </ul>
@@ -350,7 +353,7 @@ export default function App() {
         { bg: "bg-slate-900", text: "text-white", accent: "bg-sky-400", border: "border-slate-800", points: "text-slate-300", overlay: "bg-slate-900/90" },
         { bg: "bg-slate-50", text: "text-slate-800", accent: "bg-teal-600", border: "border-slate-200", points: "text-slate-600", overlay: "bg-slate-50/90" }
       ];
-      const t = themes[variantIndex];
+      const t = themes[variantIndex] || themes[0];
 
       return (
         <div className={`w-full aspect-video flex ${t.bg} border ${t.border} shadow-xl overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
@@ -377,7 +380,7 @@ export default function App() {
               {(slide.points || []).map((p, i) => (
                 <li key={i} className={`flex items-start gap-4 text-lg md:text-xl font-medium ${t.points}`}>
                   <div className={`mt-2.5 w-2 h-2 ${t.accent} shrink-0`} />
-                  <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
+                  <textarea value={p || ""} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
                 </li>
               ))}
             </ul>
@@ -398,7 +401,7 @@ export default function App() {
       { bg: "bg-[#450A0A]", text: "text-amber-50", accent: "bg-amber-400", accentText: "text-amber-400", points: "text-amber-100/80", border: "border-amber-400/30", overlay: "bg-[#450A0A]/90" },
       { bg: "bg-slate-800", text: "text-slate-50", accent: "bg-slate-300", accentText: "text-slate-300", points: "text-slate-300", border: "border-slate-600", overlay: "bg-slate-800/90" }
     ];
-    const t = themes[variantIndex];
+    const t = themes[variantIndex] || themes[0];
 
     return (
       <div className={`w-full aspect-video flex ${t.bg} shadow-2xl border ${t.border} overflow-hidden relative ${isFullscreen ? 'h-full w-full rounded-none' : 'rounded-3xl'}`}>
@@ -427,7 +430,7 @@ export default function App() {
             {(slide.points || []).map((p, i) => (
               <li key={i} className={`flex items-start gap-4 text-lg md:text-xl ${t.points} leading-relaxed`}>
                 <span className={`${t.accentText} font-sans font-black mt-1`}>•</span>
-                <textarea value={p} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
+                <textarea value={p || ""} onChange={(e) => handleEdit('point', e.target.value, i)} rows={2} className={`${baseInputStyle} -mt-1`} />
               </li>
             ))}
           </ul>
@@ -631,7 +634,7 @@ export default function App() {
                    <div key={idx} className="w-[100vw] h-[100vh] flex items-center justify-center page-break-after-always p-10">
                       <div className="w-full aspect-video border-2 border-black flex overflow-hidden">
                         <div className="p-10 flex-1 flex flex-col justify-center">
-                           <h1 className="text-5xl font-bold mb-6">{s.heading}</h1>
+                           <h1 className="text-5xl font-bold mb-6">{s.heading || ""}</h1>
                            <ul className="space-y-4">{(s.points || []).map((p,i) => <li key={i} className="text-2xl">• {p}</li>)}</ul>
                         </div>
                       </div>
